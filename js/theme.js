@@ -1,8 +1,8 @@
-// Light/dark theme: saved choice, else the OS preference. Loaded in <head> to avoid a flash.
+// Light/dark theme: saved choice, else dark. Loaded in <head> to avoid a flash.
 (function () {
   var saved = null;
   try { saved = localStorage.getItem('rkc-theme'); } catch (e) {}
-  var theme = saved || (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  var theme = saved || 'dark'; // dark terminal look by default; the toggle remembers a choice
   document.documentElement.setAttribute('data-bs-theme', theme);
   document.addEventListener('DOMContentLoaded', function () {
     var btn = document.getElementById('themeBtn');

@@ -98,7 +98,7 @@ function renderStudents() {
     return `<tr>
       <td><div class="d-flex align-items-center gap-2">${avatar(s)}
         <div class="min-w-0"><div class="fw-semibold text-truncate">${esc(s.name)}</div>
-        <a class="small font-monospace link-secondary" href="${ghUrl(s.github_username)}" target="_blank" rel="noopener">@${esc(s.github_username)}</a></div></div></td>
+        <a class="handle" href="${ghUrl(s.github_username)}" target="_blank" rel="noopener">@${esc(s.github_username)}</a></div></div></td>
       <td class="text-end">${t.points}<div class="small text-body-secondary">${t.commits} commits</div></td>
       <td class="small text-body-secondary d-none d-sm-table-cell" title="${esc(s.last_synced_at || '')}">${relativeTime(s.last_synced_at)}</td>
       <td class="text-end text-nowrap">

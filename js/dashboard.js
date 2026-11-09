@@ -41,7 +41,7 @@ function render() {
   $('#statPoints').textContent = s.pointsToday;
 
   const synced = state.students.map((x) => x.last_synced_at).filter(Boolean).sort().at(-1);
-  $('#lastSynced').textContent = `GitHub synced ${relativeTime(synced)}`;
+  $('#lastSynced').textContent = `last_sync: ${relativeTime(synced)}`;
 
   renderLeaderboard(t);
   renderPeriodSummary(t);
@@ -61,7 +61,7 @@ function renderLeaderboard(t) {
   // The gem marks the most consistent student(s): highest active-day count, ties included.
   const topIds = new Set(top.filter((r) => r.consistency === top[0].consistency).map((r) => r.student.id));
 
-  const medal = (rank) => (rank <= 3 ? `<span class="rank rank-${rank}">${rank}</span>` : `<span class="rank">${rank}</span>`);
+  const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">#${String(rank).padStart(2, '0')}</span>`;
   const body = rows.map((r) => `
     <tr data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}" tabindex="0" role="button">
       <td class="text-center">${medal(r.rank)}</td>
@@ -71,12 +71,12 @@ function renderLeaderboard(t) {
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
               ${topIds.has(r.student.id) ? '<i class="bi bi-gem text-info ms-1" title="Most consistent"></i>' : ''}</div>
-            <a class="small font-monospace link-secondary" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
+            <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} <i class="bi bi-box-arrow-up-right"></i></a>
           </div>
         </div>
       </td>
-      <td class="text-end fw-bold">${r.points}</td>
+      <td class="text-end pts">${r.points}</td>
       <td class="text-end d-none d-sm-table-cell">${r.commits}</td>
       <td class="text-end d-none d-md-table-cell">${r.activeDays}</td>
       <td class="text-end">${r.currentStreak ? `<i class="bi bi-fire text-warning"></i> ${r.currentStreak}` : '0'}</td>
@@ -87,17 +87,17 @@ function renderLeaderboard(t) {
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0 leaderboard">
         <thead><tr>
-          <th class="text-center">#</th><th>Contributor</th>
-          <th class="text-end">Points</th>
-          <th class="text-end d-none d-sm-table-cell">Commits</th>
-          <th class="text-end d-none d-md-table-cell">Active days</th>
-          <th class="text-end" title="Consecutive days with a commit">Streak</th>
-          <th class="text-end d-none d-md-table-cell">Best</th>
+          <th class="text-center">rank</th><th>contributor</th>
+          <th class="text-end">points</th>
+          <th class="text-end d-none d-sm-table-cell">commits</th>
+          <th class="text-end d-none d-md-table-cell">active_days</th>
+          <th class="text-end" title="Consecutive days with a commit">streak</th>
+          <th class="text-end d-none d-md-table-cell">best</th>
         </tr></thead>
         <tbody>${body}</tbody>
       </table>
     </div>
-    <div class="px-3 py-2 small text-body-secondary border-top">${esc(FILTERS[state.filter])} · ${periodLabel(t)}</div>`;
+    <div class="px-3 py-2 term-foot"><span class="c">//</span> ${esc(FILTERS[state.filter]).toLowerCase()} · ${periodLabel(t)}</div>`;
 
   el.querySelectorAll('tr[data-student]').forEach((tr) => {
     const open = () => openStudent(Number(tr.dataset.student));
@@ -111,10 +111,17 @@ function renderLeaderboard(t) {
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}</div>
-            <div class="small text-body-secondary">${r.consistency}/30 days · streak ${r.currentStreak} · best ${r.bestStreak}</div>
+            <div class="small"><span class="accent">${asciiBar(r.consistency, 30)}</span> <span class="text-body-secondary">${r.consistency}/30d</span></div>
+            <div class="small text-body-secondary">streak=${r.currentStreak} best=${r.bestStreak}</div>
           </div>
         </li>`).join('')}</ol>`
     : emptyHtml('No commits in the last 30 days yet.');
+}
+
+/** Terminal-style progress bar, e.g. ▰▰▰▱▱▱ */
+function asciiBar(value, max, width = 15) {
+  const filled = Math.round((value / max) * width);
+  return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
 function periodLabel(t) {
@@ -166,7 +173,8 @@ function renderChart(t) {
   $('#chart').parentElement.classList.toggle('d-none', !hasData);
   if (!hasData || typeof Chart === 'undefined') return;
 
-  const text = cssVar('--bs-secondary-color');
+  const text = cssVar('--rkc-muted');
+  Chart.defaults.font.family = cssVar('--rkc-font');
   const grid = cssVar('--bs-border-color');
   const data = {
     labels: series.map((b) => b.label),
@@ -206,16 +214,16 @@ async function openStudent(id) {
     <p class="mb-3"><a href="${ghUrl(s.github_username)}" target="_blank" rel="noopener" class="font-monospace">github.com/${esc(s.github_username)}</a>
       <span class="small text-body-secondary ms-2">synced ${relativeTime(s.last_synced_at)}</span></p>
     <div class="row g-2 mb-3 text-center">
-      ${[['Total points', total], ['Commits', commits], ['Active days', rows.length], ['Current streak', streaks.current], ['Best streak', streaks.best]]
-        .map(([k, v]) => `<div class="col"><div class="border rounded py-2"><div class="fs-5 fw-bold">${v}</div><div class="small text-body-secondary">${k}</div></div></div>`).join('')}
+      ${[['total_points', total], ['commits', commits], ['active_days', rows.length], ['streak', streaks.current], ['best_streak', streaks.best]]
+        .map(([k, v]) => `<div class="col-4 col-sm"><div class="metric"><b>${v}</b><span>${k}</span></div></div>`).join('')}
     </div>
-    <h3 class="h6">Contribution calendar</h3>
+    <h3 class="prompt mb-2"><span class="p-sym ms-0">$</span>rkc calendar --user</h3>
     <div class="mb-3">${calendarHtml(calendarValues(rows, 'commits'), {
       from: addDays(t, -364), to: t,
       level: (v) => (v === 0 ? 0 : v === 1 ? 1 : v <= 3 ? 2 : v <= 6 ? 3 : 4),
       label: (v) => `${v} commit${v === 1 ? '' : 's'}`,
     })}</div>
-    <h3 class="h6">Recent commits</h3>
+    <h3 class="prompt mb-2"><span class="p-sym ms-0">$</span>git log --oneline -15</h3>
     <div id="recentCommits">${loadingHtml()}</div>`;
   bootstrap.Modal.getOrCreateInstance($('#studentModal')).show();
 
