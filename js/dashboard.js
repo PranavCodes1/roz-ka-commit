@@ -7,12 +7,28 @@ import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime,
 
 const state = { students: [], activity: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
+const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+/** Animate a number from its previous value to `target` (ease-out). */
+function countTo(el, target, suffix = '') {
+  const from = Number(el.dataset.v || 0);
+  el.dataset.v = target;
+  if (reduceMotion || from === target) { el.textContent = `${target}${suffix}`; return; }
+  const t0 = performance.now();
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / 800);
+    el.textContent = `${Math.round(from + (target - from) * (1 - (1 - k) ** 3))}${suffix}`;
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
 
 async function load() {
   const btn = $('#refreshBtn');
   btn.disabled = true;
+  btn.classList.add('is-loading');
   if (!state.loaded) {
     for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = loadingHtml();
   }
@@ -29,16 +45,18 @@ async function load() {
     if (!state.loaded) for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = '';
   } finally {
     btn.disabled = false;
+    btn.classList.remove('is-loading');
   }
 }
 
 function render() {
   const t = today();
   const s = todaySummary(state.students, state.activity, t);
-  $('#statStudents').textContent = s.totalStudents;
-  $('#statActive').textContent = `${s.activeToday}${s.totalStudents ? ` / ${s.totalStudents}` : ''}`;
-  $('#statCommits').textContent = s.commitsToday;
-  $('#statPoints').textContent = s.pointsToday;
+  countTo($('#statStudents'), s.totalStudents);
+  countTo($('#statActive'), s.activeToday, s.totalStudents ? ` / ${s.totalStudents}` : '');
+  countTo($('#statCommits'), s.commitsToday);
+  countTo($('#statPoints'), s.pointsToday);
+  renderHeroTerm(s, buildLeaderboard(state.students, state.activity, 'all', t));
 
   const synced = state.students.map((x) => x.last_synced_at).filter(Boolean).sort().at(-1);
   $('#lastSynced').textContent = `last_sync: ${relativeTime(synced)}`;
@@ -47,6 +65,24 @@ function render() {
   renderPeriodSummary(t);
   renderCalendar(t);
   renderChart(t);
+}
+
+/** The little live terminal in the hero banner. */
+function renderHeroTerm(s, allRows) {
+  const el = $('#heroTerm');
+  if (!el) return;
+  const leader = allRows.find((r) => r.totalPoints > 0);
+  const hottest = [...allRows].sort((a, b) => b.currentStreak - a.currentStreak)[0];
+  const lines = [
+    '<span class="p-sym">$</span> rkc today',
+    `<span class="ok">✓</span> ${s.activeToday}/${s.totalStudents} contributors pushed today`,
+    `<span class="ok">✓</span> ${s.commitsToday} commits · <span class="pts-up">+${s.pointsToday} pts</span>`,
+    leader ? `<span class="star">★</span> leader: ${esc(leader.student.name)} · ${leader.totalPoints} pts` : '<span class="c">·</span> no points yet — go commit!',
+    hottest?.currentStreak ? `<span class="fire">🔥</span> hottest streak: ${esc(hottest.student.name)} · ${hottest.currentStreak}d` : '<span class="c">·</span> no active streaks',
+  ];
+  el.innerHTML = `<div class="ht-bar"><i></i><i></i><i></i><em>rkc — zsh</em></div>
+    <div class="ht-body">${lines.map((l, i) => `<div class="ht-line" style="--i:${i}">${l}</div>`).join('')}
+    <div class="ht-line" style="--i:${lines.length}"><span class="p-sym">$</span> <span class="cursor"></span></div></div>`;
 }
 
 function renderLeaderboard(t) {
@@ -62,8 +98,8 @@ function renderLeaderboard(t) {
   const topIds = new Set(top.filter((r) => r.consistency === top[0].consistency).map((r) => r.student.id));
 
   const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">#${String(rank).padStart(2, '0')}</span>`;
-  const body = rows.map((r) => `
-    <tr data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}${r.rank <= 3 && r.points > 0 ? ` podium podium-${r.rank}` : ''}" tabindex="0" role="button">
+  const body = rows.map((r, i) => `
+    <tr style="--i:${Math.min(i, 12)}" data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}${r.rank <= 3 && r.points > 0 ? ` podium podium-${r.rank}` : ''}" tabindex="0" role="button">
       <td class="text-center">${medal(r.rank)}</td>
       <td>
         <div class="d-flex align-items-center gap-2">
@@ -184,7 +220,7 @@ function renderChart(t) {
     ],
   };
   const options = {
-    responsive: true, maintainAspectRatio: false, animation: false,
+    responsive: true, maintainAspectRatio: false, animation: reduceMotion ? false : { duration: 900, easing: 'easeOutQuart' },
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { labels: { color: text } },

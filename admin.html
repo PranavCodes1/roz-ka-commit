@@ -30,7 +30,7 @@
   </nav>
 
   <main class="container-xl py-4">
-    <header class="hero-panel mb-4">
+    <header class="hero-panel mb-4 reveal" style="--d:0">
       <div class="hero-text">
         <pre class="ascii-logo" aria-hidden="true">██████╗ ██╗  ██╗ ██████╗
 ██╔══██╗██║ ██╔╝██╔════╝
@@ -38,7 +38,7 @@
 ██╔══██╗██╔═██╗ ██║
 ██║  ██║██║  ██╗╚██████╗
 ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝</pre>
-        <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> sudo ./admin</p>
+        <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> <span class="typed" style="--n:12">sudo ./admin</span></p>
         <h1 class="hero-title">Admin console<span class="cursor" aria-hidden="true"></span></h1>
         <p class="hero-sub mb-0" id="whoami">Manage contributors and sync GitHub activity.</p>
       </div>
@@ -60,7 +60,7 @@
     <div id="bootState"></div>
 
     <!-- Sign in -->
-    <section id="authView" class="d-none">
+    <section id="authView" class="d-none reveal" style="--d:1">
       <div class="card mx-auto" style="max-width: 420px">
         <div class="card-body">
           <h2 class="term-title term-title-lg mb-3">sudo rkc login</h2>
@@ -91,7 +91,7 @@
     </section>
 
     <!-- Admin -->
-    <section id="adminView" class="d-none">
+    <section id="adminView" class="d-none reveal" style="--d:1">
       <div class="row g-4">
         <div class="col-lg-5 d-flex flex-column gap-4">
           <div class="card">
