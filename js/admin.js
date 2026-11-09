@@ -109,7 +109,7 @@ function renderStudents() {
       <td class="text-end">${t.points}<div class="small text-body-secondary">${t.commits} commits</div></td>
       <td class="small text-body-secondary d-none d-sm-table-cell" title="${esc(s.last_synced_at || '')}">${relativeTime(s.last_synced_at)}</td>
       <td class="text-end text-nowrap">
-        <button class="btn btn-sm btn-outline-success" data-act="sync" data-id="${s.id}" title="Refresh from GitHub"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn btn-sm btn-outline-secondary" data-act="sync" data-id="${s.id}" title="Refresh from GitHub"><i class="bi bi-arrow-clockwise"></i></button>
         <button class="btn btn-sm btn-outline-secondary" data-act="edit" data-id="${s.id}" title="Edit"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-sm btn-outline-danger" data-act="delete" data-id="${s.id}" title="Remove"><i class="bi bi-trash"></i></button>
       </td></tr>`;

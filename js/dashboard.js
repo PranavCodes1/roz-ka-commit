@@ -7,28 +7,12 @@ import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime,
 
 const state = { students: [], activity: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
-const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-
-/** Animate a number from its previous value to `target` (ease-out). */
-function countTo(el, target, suffix = '') {
-  const from = Number(el.dataset.v || 0);
-  el.dataset.v = target;
-  if (reduceMotion || from === target) { el.textContent = `${target}${suffix}`; return; }
-  const t0 = performance.now();
-  const step = (t) => {
-    const k = Math.min(1, (t - t0) / 800);
-    el.textContent = `${Math.round(from + (target - from) * (1 - (1 - k) ** 3))}${suffix}`;
-    if (k < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
 
 async function load() {
   const btn = $('#refreshBtn');
   btn.disabled = true;
-  btn.classList.add('is-loading');
   if (!state.loaded) {
     for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = loadingHtml();
   }
@@ -48,44 +32,24 @@ async function load() {
     if (!state.loaded) for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = '';
   } finally {
     btn.disabled = false;
-    btn.classList.remove('is-loading');
   }
 }
 
 function render() {
   const t = today();
   const s = todaySummary(state.students, state.activity, t);
-  countTo($('#statStudents'), s.totalStudents);
-  countTo($('#statActive'), s.activeToday, s.totalStudents ? ` / ${s.totalStudents}` : '');
-  countTo($('#statCommits'), s.commitsToday);
-  countTo($('#statPoints'), s.pointsToday);
-  renderHeroTerm(s, buildLeaderboard(state.students, state.activity, 'all', t));
+  $('#statStudents').textContent = s.totalStudents;
+  $('#statActive').innerHTML = `${s.activeToday}${s.totalStudents ? `<span class="stat-of"> / ${s.totalStudents}</span>` : ''}`;
+  $('#statCommits').textContent = s.commitsToday;
+  $('#statPoints').textContent = s.pointsToday;
 
   const synced = state.students.map((x) => x.last_synced_at).filter(Boolean).sort().at(-1);
-  $('#lastSynced').textContent = `last_sync: ${relativeTime(synced)}`;
+  $('#lastSynced').textContent = `Last synced ${relativeTime(synced)}`;
 
   renderLeaderboard(t);
   renderPeriodSummary(t);
   renderCalendar(t);
   renderChart(t);
-}
-
-/** The little live terminal in the hero banner. */
-function renderHeroTerm(s, allRows) {
-  const el = $('#heroTerm');
-  if (!el) return;
-  const leader = allRows.find((r) => r.totalPoints > 0);
-  const hottest = [...allRows].sort((a, b) => b.currentStreak - a.currentStreak)[0];
-  const lines = [
-    '<span class="p-sym">$</span> rkc today',
-    `<span class="ok">✓</span> ${s.activeToday}/${s.totalStudents} contributors pushed today`,
-    `<span class="ok">✓</span> ${s.commitsToday} commits · <span class="pts-up">+${s.pointsToday} pts</span>`,
-    leader ? `<span class="star">★</span> leader: ${esc(leader.student.name)} · ${leader.totalPoints} pts` : '<span class="c">·</span> no points yet — go commit!',
-    hottest?.currentStreak ? `<span class="fire">🔥</span> hottest streak: ${esc(hottest.student.name)} · ${hottest.currentStreak}d` : '<span class="c">·</span> no active streaks',
-  ];
-  el.innerHTML = `<div class="ht-bar"><i></i><i></i><i></i><em>rkc — zsh</em></div>
-    <div class="ht-body">${lines.map((l, i) => `<div class="ht-line" style="--i:${i}">${l}</div>`).join('')}
-    <div class="ht-line" style="--i:${lines.length}"><span class="p-sym">$</span> <span class="cursor"></span></div></div>`;
 }
 
 function renderLeaderboard(t) {
@@ -97,46 +61,46 @@ function renderLeaderboard(t) {
   }
   const rows = buildLeaderboard(state.students, state.activity, state.filter, t);
   const top = mostConsistent(buildLeaderboard(state.students, state.activity, 'all', t));
-  // The gem marks the most consistent student(s): highest active-day count, ties included.
+  // Badge for the most consistent contributor(s): highest active-day count, ties included.
   const topIds = new Set(top.filter((r) => r.consistency === top[0].consistency).map((r) => r.student.id));
 
-  const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">#${String(rank).padStart(2, '0')}</span>`;
-  const body = rows.map((r, i) => `
-    <tr style="--i:${Math.min(i, 12)}" data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}${r.rank <= 3 && r.points > 0 ? ` podium podium-${r.rank}` : ''}" tabindex="0" role="button">
+  const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">${rank}</span>`;
+  const body = rows.map((r) => `
+    <tr data-student="${r.student.id}" tabindex="0" role="button">
       <td class="text-center">${medal(r.rank)}</td>
       <td>
         <div class="d-flex align-items-center gap-2">
           ${avatar(r.student)}
           <div class="min-w-0">
-            <div class="fw-semibold text-truncate">${r.rank === 1 && r.points > 0 ? '<i class="bi bi-trophy-fill trophy me-1" title="Leader"></i>' : ''}${esc(r.student.name)}
-              ${topIds.has(r.student.id) ? '<i class="bi bi-gem text-info ms-1" title="Most consistent"></i>' : ''}</div>
+            <div class="fw-semibold text-truncate">${esc(r.student.name)}
+              ${topIds.has(r.student.id) ? '<i class="bi bi-patch-check-fill text-consistent ms-1" title="Most consistent"></i>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
-               onclick="event.stopPropagation()">@${esc(r.student.github_username)} <i class="bi bi-box-arrow-up-right"></i></a>
+               onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
           </div>
         </div>
       </td>
-      <td class="text-end pts">${r.points}</td>
-      <td class="text-end d-none d-sm-table-cell">${r.commits}</td>
-      <td class="text-end d-none d-md-table-cell">${r.activeDays}</td>
-      <td class="text-end">${r.currentStreak ? `<i class="bi bi-fire text-warning"></i> ${r.currentStreak}` : '0'}</td>
-      <td class="text-end d-none d-md-table-cell">${r.bestStreak}</td>
+      <td class="text-end num pts">${r.points}</td>
+      <td class="text-end num d-none d-sm-table-cell">${r.commits}</td>
+      <td class="text-end num d-none d-md-table-cell">${r.activeDays}</td>
+      <td class="text-end num">${r.currentStreak ? `${r.currentStreak}<span class="unit">d</span>` : '–'}</td>
+      <td class="text-end num d-none d-md-table-cell">${r.bestStreak ? `${r.bestStreak}<span class="unit">d</span>` : '–'}</td>
     </tr>`).join('');
 
   el.innerHTML = `
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0 leaderboard">
         <thead><tr>
-          <th class="text-center">rank</th><th>contributor</th>
-          <th class="text-end">points</th>
-          <th class="text-end d-none d-sm-table-cell">commits</th>
-          <th class="text-end d-none d-md-table-cell">active_days</th>
-          <th class="text-end" title="Consecutive days with a commit">streak</th>
-          <th class="text-end d-none d-md-table-cell">best</th>
+          <th class="text-center">#</th><th>Contributor</th>
+          <th class="text-end">Points</th>
+          <th class="text-end d-none d-sm-table-cell">Commits</th>
+          <th class="text-end d-none d-md-table-cell">Active days</th>
+          <th class="text-end" title="Consecutive days with a commit">Streak</th>
+          <th class="text-end d-none d-md-table-cell">Best</th>
         </tr></thead>
         <tbody>${body}</tbody>
       </table>
     </div>
-    <div class="px-3 py-2 term-foot"><span class="c">//</span> ${esc(FILTERS[state.filter]).toLowerCase()} · ${periodLabel(t)}</div>`;
+    <div class="px-3 py-2 table-caption">${esc(FILTERS[state.filter])} · ${periodLabel(t)}</div>`;
 
   el.querySelectorAll('tr[data-student]').forEach((tr) => {
     const open = () => openStudent(Number(tr.dataset.student));
@@ -150,17 +114,16 @@ function renderLeaderboard(t) {
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}</div>
-            <div class="small"><span class="accent">${asciiBar(r.consistency, 30)}</span> <span class="text-body-secondary">${r.consistency}/30d</span></div>
-            <div class="small text-body-secondary">streak=${r.currentStreak} best=${r.bestStreak}</div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.consistency}" aria-valuemin="0" aria-valuemax="30">
+                <div class="progress-bar" style="width:${Math.round((r.consistency / 30) * 100)}%"></div>
+              </div>
+              <span class="small num">${r.consistency}/30</span>
+            </div>
+            <div class="small text-body-secondary">Streak ${r.currentStreak}d · best ${r.bestStreak}d</div>
           </div>
         </li>`).join('')}</ol>`
     : emptyHtml('No commits in the last 30 days yet.');
-}
-
-/** Terminal-style progress bar, e.g. ▰▰▰▱▱▱ */
-function asciiBar(value, max, width = 15) {
-  const filled = Math.round((value / max) * width);
-  return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
 function periodLabel(t) {
@@ -172,22 +135,24 @@ function renderPeriodSummary(t) {
   const week = periodSeries(state.activity, t, 'week', 2);
   const month = periodSeries(state.activity, t, 'month', 2);
   const row = (label, cur, prev) => {
-    const delta = cur.points - prev.points;
-    const d = delta === 0 ? '' : `<span class="small ${delta > 0 ? 'text-success' : 'text-danger'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}</span>`;
-    return `<tr><th class="fw-normal text-body-secondary">${label}</th>
-      <td class="text-end"><span class="fw-semibold">${cur.points}</span> pts ${d}</td>
-      <td class="text-end">${cur.commits} commits</td>
-      <td class="text-end">${cur.activeStudents} active</td></tr>`;
+    const delta = prev ? cur.points - prev.points : 0;
+    const d = delta === 0 ? '' : `<span class="delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>`;
+    return `<tr><th scope="row" class="fw-normal">${label}</th>
+      <td class="text-end num"><span class="fw-semibold">${cur.points}</span>${d}</td>
+      <td class="text-end num">${cur.commits}</td>
+      <td class="text-end num">${cur.activeStudents}</td></tr>`;
   };
   $('#periodSummary').innerHTML = `
-    <table class="table table-sm mb-0 small align-middle">
+    <table class="table mb-0 align-middle summary-table">
+      <thead><tr><th>Period</th><th class="text-end">Points</th><th class="text-end">Commits</th><th class="text-end">Active</th></tr></thead>
       <tbody>
         ${row('This week', week[1], week[0])}
-        ${row('Last week', week[0], { points: week[0].points })}
+        ${row('Last week', week[0])}
         ${row('This month', month[1], month[0])}
-        ${row('Last month', month[0], { points: month[0].points })}
+        ${row('Last month', month[0])}
       </tbody>
-    </table>`;
+    </table>
+    <div class="px-3 py-2 table-caption">Change shown against the previous period.</div>`;
 }
 
 function renderCalendar(t) {
@@ -212,21 +177,21 @@ function renderChart(t) {
   $('#chart').parentElement.classList.toggle('d-none', !hasData);
   if (!hasData || typeof Chart === 'undefined') return;
 
-  const text = cssVar('--rkc-muted');
-  Chart.defaults.font.family = cssVar('--rkc-font');
+  const text = cssVar('--app-muted');
+  Chart.defaults.font.family = cssVar('--app-font');
   const grid = cssVar('--bs-border-color');
   const data = {
     labels: series.map((b) => b.label),
     datasets: [
-      { type: 'bar', label: 'Points', data: series.map((b) => b.points), backgroundColor: cssVar('--rkc-green'), borderRadius: 3, yAxisID: 'y' },
-      { type: 'line', label: 'Commits', data: series.map((b) => b.commits), borderColor: cssVar('--rkc-blue'), backgroundColor: cssVar('--rkc-blue'), tension: 0.25, yAxisID: 'y1' },
+      { type: 'bar', label: 'Points', data: series.map((b) => b.points), backgroundColor: cssVar('--app-accent'), borderRadius: 3, maxBarThickness: 36, yAxisID: 'y' },
+      { type: 'line', label: 'Commits', data: series.map((b) => b.commits), borderColor: cssVar('--app-series-2'), backgroundColor: cssVar('--app-series-2'), borderWidth: 2, pointRadius: 2, tension: 0.25, yAxisID: 'y1' },
     ],
   };
   const options = {
-    responsive: true, maintainAspectRatio: false, animation: reduceMotion ? false : { duration: 900, easing: 'easeOutQuart' },
+    responsive: true, maintainAspectRatio: false, animation: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { labels: { color: text } },
+      legend: { align: 'end', labels: { color: text, boxWidth: 10, boxHeight: 10 } },
       tooltip: { callbacks: { afterBody: (items) => `Active contributors: ${series[items[0].dataIndex].activeStudents}` } },
     },
     scales: {
@@ -253,16 +218,16 @@ async function openStudent(id) {
     <p class="mb-3"><a href="${ghUrl(s.github_username)}" target="_blank" rel="noopener" class="font-monospace">github.com/${esc(s.github_username)}</a>
       <span class="small text-body-secondary ms-2">synced ${relativeTime(s.last_synced_at)}</span></p>
     <div class="row g-2 mb-3 text-center">
-      ${[['total_points', total], ['commits', commits], ['active_days', rows.length], ['streak', streaks.current], ['best_streak', streaks.best]]
+      ${[['Total points', total], ['Commits', commits], ['Active days', rows.length], ['Current streak', `${streaks.current}d`], ['Best streak', `${streaks.best}d`]]
         .map(([k, v]) => `<div class="col-4 col-sm"><div class="metric"><b>${v}</b><span>${k}</span></div></div>`).join('')}
     </div>
-    <h3 class="prompt mb-2"><span class="p-sym ms-0">$</span>rkc calendar --user</h3>
+    <h3 class="subhead">Contribution calendar</h3>
     <div class="mb-3">${calendarHtml(calendarValues(rows, 'commits'), {
       from: addDays(t, -364), to: t,
       level: (v) => (v === 0 ? 0 : v === 1 ? 1 : v <= 3 ? 2 : v <= 6 ? 3 : 4),
       label: (v) => `${v} commit${v === 1 ? '' : 's'}`,
     })}</div>
-    <h3 class="prompt mb-2"><span class="p-sym ms-0">$</span>git log --oneline -15</h3>
+    <h3 class="subhead">Recent commits</h3>
     <div id="recentCommits">${loadingHtml()}</div>`;
   bootstrap.Modal.getOrCreateInstance($('#studentModal')).show();
 

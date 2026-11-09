@@ -1,69 +1,51 @@
 <!doctype html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Roz Ka Commit (RKC) — Admin</title>
   <meta name="robots" content="noindex">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230d1117'/><text x='8' y='11.5' font-size='8' text-anchor='middle' fill='%2339d353' font-family='monospace' font-weight='bold'>&gt;_</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%2316a34a'/><path d='M4 8.5l2.5 2.5L12 5.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="css/styles.css" rel="stylesheet">
   <script src="js/theme.js"></script>
 </head>
 <body>
-  <nav class="navbar navbar-expand rkc-nav">
+  <nav class="navbar navbar-expand app-nav">
     <div class="container-xl">
       <a class="navbar-brand brand" href="./">
-        <span class="brand-mark">&gt;_</span>
-        <span class="brand-name">roz-ka-commit</span>
+        <span class="brand-mark">RKC</span>
+        <span class="brand-name d-none d-sm-inline">Roz Ka Commit</span>
       </a>
       <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-term" href="./"><i class="bi bi-speedometer2"></i><span class="d-none d-sm-inline ms-1">dashboard</span></a>
-        <button class="btn btn-sm btn-term d-none" id="signOutBtn"><i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">logout</span></button>
-        <button class="btn btn-sm btn-term" id="themeBtn" title="Toggle theme"><i class="bi bi-circle-half"></i></button>
+        <a class="btn btn-sm btn-ghost" href="./"><i class="bi bi-grid"></i><span class="d-none d-sm-inline ms-1">Dashboard</span></a>
+        <button class="btn btn-sm btn-ghost d-none" id="signOutBtn"><i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Sign out</span></button>
+        <button class="btn btn-sm btn-ghost btn-icon" id="themeBtn" title="Toggle light/dark theme" aria-label="Toggle theme"><i class="bi bi-circle-half"></i></button>
       </div>
     </div>
   </nav>
 
   <main class="container-xl py-4">
-    <header class="hero-panel mb-4 reveal" style="--d:0">
-      <div class="hero-text">
-        <pre class="ascii-logo" aria-hidden="true">██████╗ ██╗  ██╗ ██████╗
-██╔══██╗██║ ██╔╝██╔════╝
-██████╔╝█████╔╝ ██║
-██╔══██╗██╔═██╗ ██║
-██║  ██║██║  ██╗╚██████╗
-╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝</pre>
-        <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> <span class="typed" style="--n:12">sudo ./admin</span></p>
-        <h1 class="hero-title">Admin console<span class="cursor" aria-hidden="true"></span></h1>
-        <p class="hero-sub mb-0" id="whoami">Manage contributors and sync GitHub activity.</p>
+    <header class="page-header mb-4">
+      <div>
+        <h1 class="page-title">Admin</h1>
+        <p class="page-sub mb-0" id="whoami">Manage contributors and sync GitHub activity.</p>
       </div>
-      <svg class="git-graph" viewBox="0 0 360 170" aria-hidden="true" focusable="false">
-        <path class="gg-line gg-main" d="M10 120 H350"/>
-        <path class="gg-line gg-feat" d="M70 120 C100 120 100 60 130 60 H230 C260 60 260 120 290 120"/>
-        <path class="gg-line gg-fix" d="M170 60 C186 60 186 22 200 22 C214 22 214 60 230 60"/>
-        <g class="gg-dot gg-main"><circle cx="30" cy="120" r="7"/><circle cx="70" cy="120" r="7"/><circle cx="180" cy="120" r="7"/><circle cx="290" cy="120" r="9"/><circle cx="335" cy="120" r="7"/></g>
-        <g class="gg-dot gg-feat"><circle cx="130" cy="60" r="7"/><circle cx="170" cy="60" r="7"/><circle cx="230" cy="60" r="7"/></g>
-        <g class="gg-dot gg-fix"><circle cx="200" cy="22" r="6"/></g>
-        <text class="gg-label" x="18" y="148">main</text>
-        <text class="gg-label" x="132" y="84">feat/streaks</text>
-        <text class="gg-label" x="212" y="12">fix</text>
-        <text class="gg-label" x="262" y="148">merge ✓</text>
-      </svg>
     </header>
 
     <div id="pageAlert"></div>
     <div id="bootState"></div>
 
     <!-- Sign in -->
-    <section id="authView" class="d-none reveal" style="--d:1">
+    <section id="authView" class="d-none">
       <div class="card mx-auto" style="max-width: 420px">
         <div class="card-body">
-          <h2 class="term-title term-title-lg mb-3">sudo rkc login</h2>
+          <h2 class="h5 fw-semibold mb-1">Sign in</h2>
+          <p class="small text-body-secondary mb-3">Administrator access only.</p>
           <form id="loginForm" novalidate>
             <div class="mb-3">
               <label class="form-label" for="email">Email</label>
@@ -74,7 +56,7 @@
               <input class="form-control" id="password" type="password" autocomplete="current-password" required>
             </div>
             <div id="loginError"></div>
-            <button class="btn btn-accent w-100" type="submit" id="loginBtn">Sign in</button>
+            <button class="btn btn-primary w-100" type="submit" id="loginBtn">Sign in</button>
           </form>
           <p class="small text-body-secondary mt-3 mb-0">Visitors don't need an account — the <a href="./">dashboard</a> is public.</p>
         </div>
@@ -91,11 +73,11 @@
     </section>
 
     <!-- Admin -->
-    <section id="adminView" class="d-none reveal" style="--d:1">
+    <section id="adminView" class="d-none">
       <div class="row g-4">
         <div class="col-lg-5 d-flex flex-column gap-4">
           <div class="card">
-            <div class="card-header term-bar"><h2 class="term-title">rkc add</h2></div>
+            <div class="card-header section-head"><h2 class="section-title">Add contributor</h2></div>
             <div class="card-body">
               <form id="addForm" novalidate>
                 <div class="mb-3">
@@ -111,13 +93,13 @@
                   <div class="form-text">Checked against GitHub. Their recent history is synced right after adding.</div>
                 </div>
                 <div id="addMsg"></div>
-                <button class="btn btn-accent" type="submit" id="addBtn"><i class="bi bi-plus-lg me-1"></i>Add contributor</button>
+                <button class="btn btn-primary" type="submit" id="addBtn"><i class="bi bi-plus-lg me-1"></i>Add contributor</button>
               </form>
             </div>
           </div>
 
           <div class="card">
-            <div class="card-header term-bar"><h2 class="term-title">rkc sync --from github</h2></div>
+            <div class="card-header section-head"><h2 class="section-title">GitHub sync</h2></div>
             <div class="card-body">
               <p class="small text-body-secondary">
                 Fetches real commits from GitHub's public commit search and stores new ones. Only commits from <strong id="trackingStartNote">the start date</strong> onwards count; one active day = 10 points. Duplicates are ignored, so refreshing is always safe.
@@ -134,7 +116,7 @@
                 <input class="form-check-input" type="checkbox" id="fullResync">
                 <label class="form-check-label small" for="fullResync">Full re-scan since points started (<span id="trackingStart">…</span>)</label>
               </div>
-              <button class="btn btn-accent" id="syncAllBtn"><i class="bi bi-arrow-clockwise me-1"></i>Refresh all from GitHub</button>
+              <button class="btn btn-primary" id="syncAllBtn"><i class="bi bi-arrow-clockwise me-1"></i>Refresh all from GitHub</button>
               <div class="progress mt-3 d-none" id="syncProgress" role="progressbar" aria-label="Sync progress">
                 <div class="progress-bar" style="width: 0%"></div>
               </div>
@@ -146,9 +128,9 @@
 
         <div class="col-lg-7">
           <div class="card">
-            <div class="card-header term-bar">
-              <h2 class="term-title">rkc ls contributors</h2>
-              <span class="term-meta"><span id="studentCount">0</span> total</span>
+            <div class="card-header section-head">
+              <h2 class="section-title">Contributors</h2>
+              <span class="section-meta"><span id="studentCount">0</span> total</span>
             </div>
             <div class="card-body p-0" id="studentTable"></div>
           </div>
@@ -158,8 +140,7 @@
   </main>
 
   <footer class="container-xl pb-4 site-foot">
-    <div class="foot-rule" aria-hidden="true"></div>
-    <span>made with <span class="heart">♥</span>, chai &amp; <span class="accent">git push</span></span>
+    <div class="pt-3">Roz Ka Commit · Admin</div>
   </footer>
 
   <!-- Edit modal -->
@@ -190,7 +171,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-accent" id="editSave">Save</button>
+          <button type="submit" class="btn btn-primary" id="editSave">Save</button>
         </div>
       </form>
     </div>
