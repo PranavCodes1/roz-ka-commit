@@ -1,0 +1,17 @@
+{
+  "name": "roz-ka-commit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Roz Ka Commit (RKC) — daily GitHub contribution tracker. Static site; this file is only for tests and the optional scheduled sync.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:db": "node --env-file=.env --test tests/integration/*.test.js",
+    "sync": "node --env-file=.env scripts/sync.js",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.117.3"
+  },
+  "engines": { "node": ">=20.6" }
+}

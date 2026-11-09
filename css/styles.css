@@ -1,0 +1,84 @@
+/* Roz Ka Commit — small layer on top of Bootstrap 5 */
+:root,
+[data-bs-theme="light"] {
+  --rkc-green: #2da44e;
+  --rkc-blue: #0969da;
+  --cal-0: #ebedf0;
+  --cal-1: #aceebb;
+  --cal-2: #4ac26b;
+  --cal-3: #2da44e;
+  --cal-4: #116329;
+}
+[data-bs-theme="dark"] {
+  --rkc-green: #3fb950;
+  --rkc-blue: #58a6ff;
+  --cal-0: #161b22;
+  --cal-1: #0e4429;
+  --cal-2: #006d32;
+  --cal-3: #26a641;
+  --cal-4: #39d353;
+  --bs-body-bg: #0d1117;
+  --bs-tertiary-bg: #161b22;
+  --bs-border-color: #30363d;
+}
+[data-bs-theme="dark"] .card { --bs-card-bg: #161b22; }
+[data-bs-theme="dark"] .cal-cell.cal-l0 { outline: 1px solid rgba(255, 255, 255, 0.04); }
+
+body { background: var(--bs-body-bg); }
+
+.brand-mark {
+  font-family: var(--bs-font-monospace);
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--rkc-green);
+  color: #fff;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
+}
+
+.card-header { background: transparent; }
+
+.stat-label { color: var(--bs-secondary-color); font-size: 0.85rem; }
+.stat-value { font-size: 1.9rem; font-weight: 700; font-family: var(--bs-font-monospace); line-height: 1.2; }
+
+.state-box { padding: 2rem 1rem; text-align: center; }
+.min-w-0 { min-width: 0; }
+.avatar { flex-shrink: 0; background: var(--bs-secondary-bg); object-fit: cover; }
+
+/* leaderboard */
+.leaderboard tbody tr { cursor: pointer; }
+.leaderboard td, .leaderboard th { white-space: nowrap; }
+.leaderboard td:nth-child(2) { white-space: normal; max-width: 260px; }
+.rank {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.75rem; height: 1.75rem; border-radius: 50%;
+  font-family: var(--bs-font-monospace); font-weight: 700; font-size: 0.85rem;
+}
+.rank-1 { background: #d4a72c; color: #1f1600; }
+.rank-2 { background: #a8b3bd; color: #11161b; }
+.rank-3 { background: #b4703f; color: #1d0f05; }
+.consistent-row > td { background-color: rgba(var(--bs-info-rgb), 0.06); }
+.consistent-row > td:first-child { box-shadow: inset 3px 0 0 var(--bs-info); }
+
+/* contribution calendar */
+/* rtl on the scroller makes narrow screens open at the most recent weeks */
+.cal-scroll { overflow-x: auto; padding-bottom: 0.25rem; direction: rtl; }
+.cal { display: flex; gap: 3px; width: max-content; direction: ltr; }
+.cal-week { display: flex; flex-direction: column; gap: 3px; }
+.cal-cell { width: 11px; height: 11px; border-radius: 2px; }
+.cal-month, .cal-dow { height: 11px; font-size: 9px; line-height: 11px; color: var(--bs-secondary-color); white-space: nowrap; }
+.cal-month { height: 14px; width: 11px; overflow: visible; }
+.cal-labels { margin-right: 4px; }
+.cal-dow { width: 22px; }
+.cal-out { visibility: hidden; }
+.cal-l0 { background: var(--cal-0); }
+.cal-l1 { background: var(--cal-1); }
+.cal-l2 { background: var(--cal-2); }
+.cal-l3 { background: var(--cal-3); }
+.cal-l4 { background: var(--cal-4); }
+.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: 0.5rem; }
+
+.chart-wrap { position: relative; height: 300px; }
+
+.sync-log { max-height: 220px; overflow-y: auto; }
+.sync-log li { padding: 0.15rem 0; border-bottom: 1px dashed var(--bs-border-color); }
