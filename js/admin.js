@@ -1,7 +1,8 @@
 // Admin page: sign in, manage students, sync GitHub activity.
 // Every write is checked again by Supabase Row Level Security; hiding the UI is not the security boundary.
 import { CONFIG } from './config.js';
-import { supabase, configError, loadStudents, loadActivity, syncStore } from './db.js';
+import { supabase, configError, loadStudents, loadActivity, loadTrackingStart, syncStore } from './db.js';
+import { formatDay } from './dates.js';
 import { GitHubClient } from './github.js';
 import { syncStudent, syncAll } from './sync.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg } from './ui.js';
@@ -52,6 +53,12 @@ async function route(session) {
     return;
   }
   show('#adminView');
+  const start = await loadTrackingStart();
+  $('#trackingStart').textContent = start ? formatDay(start) : 'unknown';
+  $('#trackingStartNote').textContent = start ? formatDay(start) : 'the start date';
+  if (!start) {
+    $('#pageAlert').innerHTML = errorHtml('The database is missing rkc_tracking_start(). Re-run supabase/schema.sql in the Supabase SQL Editor, otherwise commits from before the start date would be counted.');
+  }
   await refreshStudents();
 }
 
@@ -170,6 +177,7 @@ function openEdit(s) {
   $('#editUser').dataset.original = s.github_username;
   $('#editUserWarn').classList.add('d-none');
   $('#editMsg').innerHTML = '';
+  $('#editSave').disabled = true;
   editModal().show();
 }
 $('#editUser').addEventListener('input', (e) => {
@@ -215,8 +223,13 @@ function openDelete(s) {
   deleting = s;
   $('#deleteName').textContent = `${s.name} (@${s.github_username})`;
   $('#deleteMsg').innerHTML = '';
+  $('#deleteConfirm').disabled = true; // enabled once the dialog has finished opening
   deleteModal().show();
 }
+// Bootstrap ignores hide() while a modal is still animating open, so the action
+// buttons only become clickable after 'shown'.
+$('#deleteModal').addEventListener('shown.bs.modal', () => { $('#deleteConfirm').disabled = false; });
+$('#editModal').addEventListener('shown.bs.modal', () => { $('#editSave').disabled = false; });
 $('#deleteConfirm').addEventListener('click', async () => {
   if (!deleting) return;
   $('#deleteConfirm').disabled = true;
@@ -238,6 +251,11 @@ function log(html) {
 async function runSync(students) {
   if (state.syncing) { $('#syncStatus').innerHTML = '<span class="text-warning">A sync is already running.</span>'; return; }
   if (!students.length) { $('#syncStatus').textContent = 'No contributors to sync.'; return; }
+  const trackingStart = await loadTrackingStart();
+  if (!trackingStart) {
+    $('#syncStatus').innerHTML = '<span class="text-danger">Sync blocked: re-run supabase/schema.sql first (missing tracking start date).</span>';
+    return;
+  }
   state.syncing = true;
   document.querySelectorAll('#syncAllBtn, button[data-act="sync"]').forEach((b) => (b.disabled = true));
   const bar = $('#syncProgress');
@@ -249,6 +267,7 @@ async function runSync(students) {
     $('#syncStatus').innerHTML = `<span class="text-warning"><i class="bi bi-hourglass-split"></i> ${esc(reason)} — waiting ${Math.ceil(ms / 1000)} s…</span>`;
   });
   const opts = {
+    trackingStart,
     github: gh, store: syncStore, timeZone: CONFIG.TIMEZONE,
     backfillDays: CONFIG.BACKFILL_DAYS, overlapDays: CONFIG.SYNC_OVERLAP_DAYS, full: $('#fullResync').checked,
   };
@@ -282,7 +301,6 @@ async function runSync(students) {
 $('#syncAllBtn').addEventListener('click', () => runSync(state.students));
 
 // ---------- boot ----------
-$('#backfillDays').textContent = CONFIG.BACKFILL_DAYS;
 $('#ghToken').value = readToken();
 try { $('#rememberToken').checked = !!localStorage.getItem(TOKEN_KEY); } catch { /* ignore */ }
 

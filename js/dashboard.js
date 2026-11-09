@@ -1,6 +1,6 @@
 // Public dashboard + leaderboard. Read-only: works for any visitor.
 import { CONFIG } from './config.js';
-import { configError, loadStudents, loadActivity, loadRecentCommits } from './db.js';
+import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
 import { buildLeaderboard, mostConsistent, todaySummary, periodSeries, calendarValues, computeStreaks, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
@@ -34,7 +34,10 @@ async function load() {
   }
   $('#pageAlert').innerHTML = '';
   try {
-    const [students, activity] = await Promise.all([loadStudents(), loadActivity()]);
+    const [students, activity, start] = await Promise.all([loadStudents(), loadActivity(), loadTrackingStart()]);
+    const startText = start ? formatDay(start) : '—';
+    $('#startChip').textContent = startText;
+    $('#startFoot').textContent = startText;
     state.students = students;
     state.activity = activity;
     state.loaded = true;

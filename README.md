@@ -14,6 +14,10 @@ It is built to be hosted for free on **GitHub Pages**.
 
 ## Points rules
 
+Points are given **per day, not per commit**, and only for commits made on or after the
+**tracking start date** (`rkc_tracking_start()` in `supabase/schema.sql`, currently **9 Nov 2026**).
+Older commits are never stored, so they give no points, streaks or calendar activity.
+
 | Situation | Points |
 |---|---|
 | First qualifying commit of a day | **10** |
@@ -117,7 +121,8 @@ rights, because only admins may write commits.
 - RKC uses the **commit search API**:
   `GET /search/commits?q=author:<user> author-date:<from>..<to> merge:false&sort=author-date`.
   It returns real commits with their SHA, author date, repository and message. Nothing is ever generated or estimated.
-- **First sync** of a contributor: the last `BACKFILL_DAYS` days.
+- Nothing before the tracking start date is ever fetched or stored.
+- **First sync** of a contributor: the last `BACKFILL_DAYS` days (but never before the start date).
   **Later syncs**: from `SYNC_OVERLAP_DAYS` (default 14) days before the previous sync up to today, so commits made earlier but
   pushed later are still picked up. After a long gap it simply reaches back further, so no day is skipped.
   Tick **Full re-scan** to re-fetch the whole backfill window.
@@ -172,6 +177,11 @@ npm run test:db   # RLS, constraints, duplicate handling, points triggers, usern
 
 To run Supabase locally for the integration tests: `npx supabase init && npx supabase start`, then apply the schema with
 `psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/schema.sql` and use the printed URL/keys.
+
+## Changing the start date
+Edit the date in `rkc_tracking_start()` in `supabase/schema.sql` and run the whole file again in the SQL Editor.
+Commits from before the new date are deleted (with their points) by the cleanup at the end of the file.
+If you move the date *earlier*, tick **Full re-scan** on the admin page and refresh, so older commits are fetched.
 
 ## Changing the timezone
 Edit `TIMEZONE` in `js/config.js` **and** `rkc_timezone()` in `supabase/schema.sql` (re-run that function definition), then run

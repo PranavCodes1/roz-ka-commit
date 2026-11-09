@@ -40,6 +40,16 @@ async function fetchAll(build, pageSize = 1000) {
   }
 }
 
+/** The day points started ('YYYY-MM-DD'), from the database. Null if the schema predates it. */
+let trackingStartPromise = null;
+export function loadTrackingStart() {
+  trackingStartPromise ??= supabase.rpc('rkc_tracking_start').then(({ data, error }) => {
+    if (error) { console.warn('rkc_tracking_start() unavailable — re-run supabase/schema.sql', error); return null; }
+    return data;
+  });
+  return trackingStartPromise;
+}
+
 export const loadStudents = () =>
   fetchAll(() => supabase.from('students').select('*').order('name').order('id'));
 

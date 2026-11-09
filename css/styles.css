@@ -268,7 +268,8 @@ body::before {
 .chip:hover { transform: translateY(-2px); border-color: var(--rkc-purple); }
 .chip:nth-child(1) i { color: var(--rkc-green); }
 .chip:nth-child(2) i { color: var(--rkc-amber); }
-.chip:nth-child(3) i { color: var(--rkc-purple); }
+.chip:nth-child(3) i { color: var(--rkc-pink); }
+.chip:nth-child(4) i { color: var(--rkc-purple); }
 
 /* live mini terminal in the hero */
 .hero-term {

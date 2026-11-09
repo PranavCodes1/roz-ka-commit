@@ -43,7 +43,7 @@
 ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝</pre>
         <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> <span class="typed" style="--n:18">./dashboard --live</span></p>
         <h1 class="hero-title">Aaj ka commit, <span class="accent glow">kal ki progress.</span><span class="cursor" aria-hidden="true"></span></h1>
-        <div class="chips mt-3"><span class="chip"><i class="bi bi-plus-circle"></i> +10 pts / day</span><span class="chip"><i class="bi bi-fire"></i> streaks</span><span class="chip"><i class="bi bi-github"></i> real public commits</span></div>
+        <div class="chips mt-3"><span class="chip"><i class="bi bi-plus-circle"></i> +10 pts per active day</span><span class="chip"><i class="bi bi-flag"></i> since <span id="startChip">…</span></span><span class="chip"><i class="bi bi-fire"></i> streaks</span><span class="chip"><i class="bi bi-github"></i> real public commits</span></div>
       </div>
       <div class="hero-term" id="heroTerm" aria-label="Today at a glance"></div>
     </header>
@@ -85,7 +85,7 @@
           </div>
           <div class="card-body p-0" id="leaderboard"></div>
           <div class="card-footer term-foot">
-            <span class="c">//</span> +10 for the first commit of the day · max 10/day ·
+            <span class="c">//</span> +10 per day with ≥1 commit (not per commit) · counting since <span id="startFoot">…</span> ·
             <i class="bi bi-gem text-info"></i> most consistent (active days, last 30) · click a row for details
           </div>
         </div>

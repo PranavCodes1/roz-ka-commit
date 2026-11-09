@@ -6,6 +6,8 @@
 -- It is idempotent: re-running it is safe and will not delete data.
 --
 -- Points rules (enforced here, in the database, not in the browser):
+--   * only commits made on/after rkc_tracking_start() count (see Settings)
+--   * points are per DAY, not per commit:
 --   * first qualifying commit of a day  -> 10 points
 --   * more commits on the same day      -> 0 extra points
 --   * no commits                        -> 0 points (no row)
@@ -19,6 +21,12 @@
 -- Keep this in sync with TIMEZONE in js/config.js.
 create or replace function public.rkc_timezone()
 returns text language sql immutable as $$ select 'Asia/Kolkata'::text $$;
+
+-- The day tracking and points start (in rkc_timezone()). Commits dated
+-- earlier are never stored, so they earn no points and start no streaks.
+-- The website reads this value, so it only needs changing here.
+create or replace function public.rkc_tracking_start()
+returns date language sql immutable as $$ select date '2026-11-09' $$;
 
 -- Points awarded for a day with `commit_count` qualifying commits.
 create or replace function public.rkc_daily_points(commit_count integer)
@@ -110,6 +118,9 @@ begin
     return null;  -- silently skip the row
   end if;
   new.commit_date := (new.committed_at at time zone public.rkc_timezone())::date;
+  if new.commit_date < public.rkc_tracking_start() then
+    return null;  -- before tracking started: not stored, earns nothing
+  end if;
   new.message := left(new.message, 500);
   return new;
 end $$;
@@ -197,6 +208,7 @@ begin
   update public.commits
      set commit_date = (committed_at at time zone public.rkc_timezone())::date
    where commit_date <> (committed_at at time zone public.rkc_timezone())::date;
+  delete from public.commits where commit_date < public.rkc_tracking_start();
   delete from public.daily_activity where true;
   insert into public.daily_activity (student_id, activity_date, commit_count, points)
   select student_id, commit_date, count(*), public.rkc_daily_points(count(*)::int)
@@ -227,6 +239,7 @@ grant insert, delete on public.commits to authenticated;
 revoke all on function public.rkc_rebuild_daily_activity() from public, anon;
 grant execute on function public.rkc_rebuild_daily_activity() to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
+grant execute on function public.rkc_tracking_start() to anon, authenticated;
 
 -- admins
 drop policy if exists "admins: read own row" on public.admins;
@@ -267,3 +280,10 @@ create policy "commits: admin delete" on public.commits
 drop policy if exists "daily_activity: public read" on public.daily_activity;
 create policy "daily_activity: public read" on public.daily_activity
   for select to anon, authenticated using (true);
+
+-- ---------------------------------------------------------------------
+-- One-time cleanup: remove commits from before the tracking start date
+-- (e.g. from an earlier backfill). Their points disappear with them via
+-- the delete trigger. Safe to re-run; does nothing once clean.
+-- ---------------------------------------------------------------------
+delete from public.commits where commit_date < public.rkc_tracking_start();

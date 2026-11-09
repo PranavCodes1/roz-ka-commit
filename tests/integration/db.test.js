@@ -86,39 +86,58 @@ test('constraints: duplicate usernames (any case) and invalid usernames are reje
   assert.equal(bad.error?.code, '23514');
 });
 
-test('points: first commit of a day = 10, more commits = 0 extra, duplicates ignored, timezone applied', async () => {
+// Commits are only stored from rkc_tracking_start() on (India time). The tests build
+// dates relative to that start; run them against a database whose start date is at
+// least 3 days in the past (on a local DB:  create or replace function
+// public.rkc_tracking_start() returns date language sql immutable as $$ select date '2026-10-25' $$;).
+let S = null;
+const addDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+const at = (dayOffset, utcTime) => `${addDays(S, dayOffset)}T${utcTime}Z`;
+const enoughHistory = () => S && addDays(S, 3) <= new Date().toISOString().slice(0, 10);
+
+test('tracking start date is readable by everyone', async () => {
+  const { data, error } = await anon.rpc('rkc_tracking_start');
+  assert.equal(error, null);
+  assert.match(data, /^\d{4}-\d{2}-\d{2}$/);
+  S = data;
+});
+
+test('points: per active day (not per commit), duplicates ignored, timezone applied, nothing before the start date', async (t) => {
+  if (!enoughHistory()) return t.skip(`tracking start ${S} is too recent for this test`);
   const s = await addStudent('-pts');
   const rows = [
-    commit(s, 1, '2026-10-31T20:00:00Z'), // 01:30 Nov 1 IST
-    commit(s, 2, '2026-11-01T05:00:00Z'), // Nov 1 IST
-    commit(s, 3, '2026-11-01T06:00:00Z'), // Nov 1 IST
-    commit(s, 4, '2026-10-30T10:00:00Z'), // Oct 30 IST
+    commit(s, 1, at(1, '20:00:00')), // 01:30 IST on S+2
+    commit(s, 2, at(2, '05:00:00')), // S+2
+    commit(s, 3, at(2, '06:00:00')), // S+2
+    commit(s, 4, at(0, '10:00:00')), // S
     commit(s, 5, '2099-12-31T20:59:59Z'), // spoofed future: dropped by trigger
+    commit(s, 7, at(-1, '18:00:00')), // 23:30 IST the day BEFORE the start: dropped
+    commit(s, 8, at(-30, '10:00:00')), // a month before the start: dropped
   ];
   const up = (r) => admin.from('commits').upsert(r, { onConflict: 'student_id,sha', ignoreDuplicates: true }).select('id');
   const first = await up(rows);
   assert.equal(first.error, null);
   assert.equal(first.data.length, 4);
-  const again = await up([...rows, commit(s, 1, '2026-10-31T20:00:00Z')]); // re-sync: nothing new
+  const again = await up([...rows, commit(s, 1, at(1, '20:00:00'))]); // re-sync: nothing new
   assert.equal(again.data.length, 0);
 
   assert.deepEqual((await activityOf(s.id)).map((r) => [r.activity_date, r.commit_count, r.points]),
-    [['2026-10-30', 1, 10], ['2026-11-01', 3, 10]]);
+    [[S, 1, 10], [addDays(S, 2), 3, 10]]);
 
-  // one new commit on an existing day: count goes up, points stay at the 10 cap
-  await up([commit(s, 6, '2026-11-01T07:00:00Z')]);
+  // one new commit on an existing day: count goes up, points stay at 10 for that day
+  await up([commit(s, 6, at(2, '07:00:00'))]);
   const last = (await activityOf(s.id)).at(-1);
   assert.deepEqual([last.commit_count, last.points], [4, 10]);
 
   // admin maintenance function rebuilds the same result
   assert.equal((await admin.rpc('rkc_rebuild_daily_activity')).error, null);
   assert.deepEqual((await activityOf(s.id)).map((r) => [r.activity_date, r.commit_count, r.points]),
-    [['2026-10-30', 1, 10], ['2026-11-01', 4, 10]]);
+    [[S, 1, 10], [addDays(S, 2), 4, 10]]);
 });
 
 test('editing the GitHub username clears old history; deleting removes everything', async () => {
   const s = await addStudent('-edit');
-  await admin.from('commits').insert(commit(s, 10, '2026-11-01T10:00:00Z'));
+  await admin.from('commits').insert(commit(s, 10, at(0, '10:00:00')));
   await admin.from('students').update({ last_synced_at: new Date().toISOString() }).eq('id', s.id);
   assert.equal((await activityOf(s.id)).length, 1);
 
@@ -131,7 +150,7 @@ test('editing the GitHub username clears old history; deleting removes everythin
   assert.equal((await activityOf(s.id)).length, 0);
   assert.equal((await anon.from('commits').select('id').eq('student_id', s.id)).data.length, 0);
 
-  await admin.from('commits').insert(commit(s, 11, '2026-11-02T10:00:00Z'));
+  await admin.from('commits').insert(commit(s, 11, at(0, '11:00:00')));
   const del = await admin.from('students').delete().eq('id', s.id);
   assert.equal(del.error, null);
   assert.equal((await activityOf(s.id)).length, 0);
@@ -151,7 +170,7 @@ test('live GitHub sync stores real commits once and awards 10 points per active 
       async markSynced(id, at) { await admin.from('students').update({ last_synced_at: at }).eq('id', id); },
     };
     const github = new GitHubClient({ token: process.env.GITHUB_TOKEN || '' });
-    const r1 = await syncStudent(s, { github, store, timeZone: 'Asia/Kolkata', backfillDays: 60 });
+    const r1 = await syncStudent(s, { github, store, timeZone: 'Asia/Kolkata', backfillDays: 60, trackingStart: S });
     console.log('  live sync:', r1);
     assert.equal(r1.inserted, r1.unique);
 
@@ -162,8 +181,9 @@ test('live GitHub sync stores real commits once and awards 10 points per active 
     assert.equal(act.reduce((a, r) => a + r.points, 0), 10 * days.size);
     assert.equal(act.reduce((a, r) => a + r.commit_count, 0), commits.length);
     assert.ok(act.every((r) => r.points === 10));
+    assert.ok(commits.every((c) => c.commit_date >= S), 'no commits before the start date');
 
-    const r2 = await syncStudent({ ...s, last_synced_at: new Date().toISOString() }, { github, store, timeZone: 'Asia/Kolkata', backfillDays: 60 });
+    const r2 = await syncStudent({ ...s, last_synced_at: new Date().toISOString() }, { github, store, timeZone: 'Asia/Kolkata', backfillDays: 60, trackingStart: S });
     assert.equal(r2.inserted, 0, 'second sync must not duplicate commits');
   } finally {
     await service.from('students').delete().eq('id', s.id);

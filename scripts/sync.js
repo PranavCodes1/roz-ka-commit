@@ -44,8 +44,14 @@ const store = {
   },
 };
 
+const trackingStart = await rest('rpc/rkc_tracking_start', { method: 'POST', body: {} }).catch(() => null);
+if (!trackingStart) {
+  console.error('rkc_tracking_start() is missing: re-run supabase/schema.sql first.');
+  process.exit(1);
+}
+
 const students = await rest('students?select=id,name,github_username,last_synced_at&order=last_synced_at.asc.nullsfirst');
-console.log(`Syncing ${students.length} contributors (timezone ${CONFIG.TIMEZONE})`);
+console.log(`Syncing ${students.length} contributors (timezone ${CONFIG.TIMEZONE}, counting from ${trackingStart})`);
 
 const github = new GitHubClient({
   token: process.env.GITHUB_TOKEN || '',
@@ -54,7 +60,7 @@ const github = new GitHubClient({
 });
 
 const results = await syncAll(students, {
-  github, store, timeZone: CONFIG.TIMEZONE, backfillDays: CONFIG.BACKFILL_DAYS, overlapDays: CONFIG.SYNC_OVERLAP_DAYS,
+  github, store, timeZone: CONFIG.TIMEZONE, trackingStart, backfillDays: CONFIG.BACKFILL_DAYS, overlapDays: CONFIG.SYNC_OVERLAP_DAYS,
 }, (r) => console.log(r.ok
   ? `  ✓ @${r.student.github_username}: ${r.unique} commits in ${r.from}..${r.to}, ${r.inserted} new`
   : `  ✗ @${r.student.github_username}: ${r.error.message}`));

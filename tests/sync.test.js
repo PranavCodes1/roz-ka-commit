@@ -159,3 +159,28 @@ test('syncAll continues after a per-student error but stops on rate limit', asyn
   assert.deepEqual(results.map((r) => r.ok), [false, true, false]);
   assert.equal(results[2].error.code, 'rate_limited');
 });
+
+test('tracking start: window never reaches before the start date', () => {
+  const opts = { timeZone: 'Asia/Kolkata', backfillDays: 90, overlapDays: 14, now: NOW, trackingStart: '2026-11-09' };
+  // first sync: backfill clamped to the start date (minus the 1-day timezone pad)
+  assert.deepEqual(syncWindow(student, opts), { from: '2026-11-08', to: '2026-11-10' });
+  // later syncs and full re-scans are clamped too
+  assert.equal(syncWindow({ ...student, last_synced_at: '2026-11-09T02:00:00Z' }, opts).from, '2026-11-08');
+  assert.equal(syncWindow(student, { ...opts, full: true }).from, '2026-11-08');
+  // once the start is far enough back, normal rules apply
+  const later = { ...opts, now: new Date('2026-12-20T06:00:00Z') };
+  assert.equal(syncWindow({ ...student, last_synced_at: '2026-12-19T06:00:00Z' }, later).from, '2026-12-04');
+});
+
+test('tracking start: commits from before the start date are not stored', async () => {
+  const stored = [];
+  const store = { insertCommits: async (rows) => { stored.push(...rows); return rows.length; }, markSynced: async () => {} };
+  const fetch = fakeFetch([response(200, { total_count: 3, items: [
+    item(1, '2026-11-08T18:00:00Z'), // 23:30 Nov 8 IST: before start
+    item(2, '2026-11-08T19:00:00Z'), // 00:30 Nov 9 IST: counts
+    item(3, '2026-11-09T05:00:00Z'), // Nov 9 IST: counts
+  ] })]);
+  const r = await syncStudent(student, { github: new GitHubClient({ fetch }), store, timeZone: 'Asia/Kolkata', trackingStart: '2026-11-09', now: NOW });
+  assert.deepEqual(stored.map((x) => x.sha), [sha(2), sha(3)]);
+  assert.deepEqual([r.fetched, r.unique, r.inserted], [3, 2, 2]);
+});

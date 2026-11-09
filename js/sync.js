@@ -33,26 +33,32 @@ export function toCommitRows(items, student, now = new Date()) {
 }
 
 /**
- * Which author-date window to fetch. First sync: the last `backfillDays` days.
+ * Which author-date window to fetch. Never earlier than `trackingStart` (the day
+ * points started). First sync: the last `backfillDays` days.
  * Later syncs: from `overlapDays` before the previous sync, so commits that were
  * pushed (and indexed by GitHub) a few days after they were authored are still found.
  */
-export function syncWindow(student, { timeZone, backfillDays, overlapDays, full = false, now = new Date() }) {
+export function syncWindow(student, { timeZone, backfillDays, overlapDays, trackingStart = null, full = false, now = new Date() }) {
   const today = todayIn(timeZone, now);
-  const backfillFrom = addDays(today, -(backfillDays - 1));
+  let backfillFrom = addDays(today, -(backfillDays - 1));
+  if (trackingStart && backfillFrom < trackingStart) backfillFrom = trackingStart;
   // After a long gap this reaches further back than the backfill window, which is
   // what we want: nothing between two syncs is ever skipped.
-  const from = !full && student.last_synced_at
+  let from = !full && student.last_synced_at
     ? addDays(dateInZone(student.last_synced_at, timeZone), -overlapDays)
     : backfillFrom;
+  if (trackingStart && from < trackingStart) from = trackingStart; // nothing before tracking started
   // GitHub compares author dates in UTC; pad by a day each side for timezone skew.
   return { from: addDays(from, -1), to: addDays(today, 1) };
 }
 
-export async function syncStudent(student, { github, store, timeZone, backfillDays = 90, overlapDays = 14, full = false, now = new Date(), onPage }) {
-  const { from, to } = syncWindow(student, { timeZone, backfillDays, overlapDays, full, now });
+export async function syncStudent(student, { github, store, timeZone, backfillDays = 90, overlapDays = 14, trackingStart = null, full = false, now = new Date(), onPage }) {
+  const { from, to } = syncWindow(student, { timeZone, backfillDays, overlapDays, trackingStart, full, now });
   const items = await github.searchCommits(student.github_username, from, to, onPage);
-  const rows = toCommitRows(items, student, now);
+  // The window is padded a day for timezone skew; drop anything before the start
+  // date here too (the database enforces the same rule).
+  const rows = toCommitRows(items, student, now)
+    .filter((r) => !trackingStart || dateInZone(r.committed_at, timeZone) >= trackingStart);
   const inserted = rows.length ? await store.insertCommits(rows) : 0;
   await store.markSynced(student.id, now.toISOString());
   return { from, to, fetched: items.length, unique: rows.length, inserted };
