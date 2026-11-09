@@ -52,7 +52,7 @@ function render() {
 function renderLeaderboard(t) {
   const el = $('#leaderboard');
   if (!state.students.length) {
-    el.innerHTML = emptyHtml('No students yet. An admin can add students on the <a href="admin.html">Admin</a> page.', 'bi-people');
+    el.innerHTML = emptyHtml('No contributors yet. An admin can add contributors on the <a href="admin.html">Admin</a> page.', 'bi-people');
     $('#consistent').innerHTML = emptyHtml('Nothing to show yet.');
     return;
   }
@@ -87,7 +87,7 @@ function renderLeaderboard(t) {
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0 leaderboard">
         <thead><tr>
-          <th class="text-center">#</th><th>Student</th>
+          <th class="text-center">#</th><th>Contributor</th>
           <th class="text-end">Points</th>
           <th class="text-end d-none d-sm-table-cell">Commits</th>
           <th class="text-end d-none d-md-table-cell">Active days</th>
@@ -151,7 +151,7 @@ function renderCalendar(t) {
   $('#calendar').innerHTML = calendarHtml(values, {
     from: addDays(t, -364), to: t,
     level: (v) => (v === 0 ? 0 : Math.min(4, Math.ceil((v / n) * 4))),
-    label: (v) => `${v} of ${n} student${n === 1 ? '' : 's'} active`,
+    label: (v) => `${v} of ${n} contributor${n === 1 ? '' : 's'} active`,
   });
 }
 
@@ -180,7 +180,7 @@ function renderChart(t) {
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { labels: { color: text } },
-      tooltip: { callbacks: { afterBody: (items) => `Active students: ${series[items[0].dataIndex].activeStudents}` } },
+      tooltip: { callbacks: { afterBody: (items) => `Active contributors: ${series[items[0].dataIndex].activeStudents}` } },
     },
     scales: {
       x: { ticks: { color: text }, grid: { display: false } },

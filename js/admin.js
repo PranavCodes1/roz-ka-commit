@@ -35,7 +35,7 @@ async function route(session) {
   $('#bootState').innerHTML = '';
   if (!session) {
     $('#signOutBtn').classList.add('d-none');
-    $('#whoami').textContent = 'Manage students and sync GitHub activity.';
+    $('#whoami').textContent = 'Manage contributors and sync GitHub activity.';
     show('#authView');
     return;
   }
@@ -83,14 +83,14 @@ async function refreshStudents() {
     }
     renderStudents();
   } catch (err) {
-    $('#studentTable').innerHTML = `<div class="p-3">${errorHtml('Could not load students: ' + errMsg(err))}</div>`;
+    $('#studentTable').innerHTML = `<div class="p-3">${errorHtml('Could not load contributors: ' + errMsg(err))}</div>`;
   }
 }
 
 function renderStudents() {
   $('#studentCount').textContent = state.students.length;
   if (!state.students.length) {
-    $('#studentTable').innerHTML = emptyHtml('No students yet. Add the first one using the form.', 'bi-person-plus');
+    $('#studentTable').innerHTML = emptyHtml('No contributors yet. Add the first one using the form.', 'bi-person-plus');
     return;
   }
   const rows = state.students.map((s) => {
@@ -108,7 +108,7 @@ function renderStudents() {
       </td></tr>`;
   }).join('');
   $('#studentTable').innerHTML = `<div class="table-responsive"><table class="table align-middle mb-0">
-    <thead><tr><th>Student</th><th class="text-end">Points</th><th class="d-none d-sm-table-cell">Synced</th><th></th></tr></thead>
+    <thead><tr><th>Contributor</th><th class="text-end">Points</th><th class="d-none d-sm-table-cell">Synced</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -237,7 +237,7 @@ function log(html) {
 
 async function runSync(students) {
   if (state.syncing) { $('#syncStatus').innerHTML = '<span class="text-warning">A sync is already running.</span>'; return; }
-  if (!students.length) { $('#syncStatus').textContent = 'No students to sync.'; return; }
+  if (!students.length) { $('#syncStatus').textContent = 'No contributors to sync.'; return; }
   state.syncing = true;
   document.querySelectorAll('#syncAllBtn, button[data-act="sync"]').forEach((b) => (b.disabled = true));
   const bar = $('#syncProgress');
@@ -252,7 +252,7 @@ async function runSync(students) {
     github: gh, store: syncStore, timeZone: CONFIG.TIMEZONE,
     backfillDays: CONFIG.BACKFILL_DAYS, overlapDays: CONFIG.SYNC_OVERLAP_DAYS, full: $('#fullResync').checked,
   };
-  $('#syncStatus').textContent = `Syncing ${students.length} student${students.length === 1 ? '' : 's'}…`;
+  $('#syncStatus').textContent = `Syncing ${students.length} contributor${students.length === 1 ? '' : 's'}…`;
 
   const results = await syncAll(students, opts, (r) => {
     done++;

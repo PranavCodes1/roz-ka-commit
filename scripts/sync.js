@@ -45,7 +45,7 @@ const store = {
 };
 
 const students = await rest('students?select=id,name,github_username,last_synced_at&order=last_synced_at.asc.nullsfirst');
-console.log(`Syncing ${students.length} students (timezone ${CONFIG.TIMEZONE})`);
+console.log(`Syncing ${students.length} contributors (timezone ${CONFIG.TIMEZONE})`);
 
 const github = new GitHubClient({
   token: process.env.GITHUB_TOKEN || '',

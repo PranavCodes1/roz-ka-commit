@@ -107,7 +107,7 @@ export class GitHubClient {
       // If the account does not exist (deleted or renamed), GitHub silently ignores
       // the author: qualifier and returns everyone's commits. Detect that and stop.
       if (first.items.length && !first.items.some((i) => (i.author?.login || '').toLowerCase() === login)) {
-        throw new GitHubError(`GitHub user @${username} was not found (renamed or deleted?). Edit the student's username.`, { status: 422, code: 'not_found' });
+        throw new GitHubError(`GitHub user @${username} was not found (renamed or deleted?). Edit the contributor's username.`, { status: 422, code: 'not_found' });
       }
       if (first.total_count > 1000 && a < b) {
         const mid = midpoint(a, b);
