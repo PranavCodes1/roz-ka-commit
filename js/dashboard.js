@@ -7,6 +7,7 @@ import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime,
 
 const state = { students: [], activity: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
+const CONSISTENT_MIN_DAYS = 3;
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
 
@@ -61,8 +62,11 @@ function renderLeaderboard(t) {
   }
   const rows = buildLeaderboard(state.students, state.activity, state.filter, t);
   const top = mostConsistent(buildLeaderboard(state.students, state.activity, 'all', t));
-  // Badge for the most consistent contributor(s): highest active-day count, ties included.
-  const topIds = new Set(top.filter((r) => r.consistency === top[0].consistency).map((r) => r.student.id));
+  // "Consistent" label for the contributor(s) with the most active days in the last
+  // 30 (ties included) — only once that is at least CONSISTENT_MIN_DAYS, so a single
+  // active day doesn't earn it.
+  const best = top[0]?.consistency ?? 0;
+  const topIds = new Set(best >= CONSISTENT_MIN_DAYS ? top.filter((r) => r.consistency === best).map((r) => r.student.id) : []);
 
   const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">${rank}</span>`;
   const body = rows.map((r) => `
@@ -73,7 +77,7 @@ function renderLeaderboard(t) {
           ${avatar(r.student)}
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
-              ${topIds.has(r.student.id) ? '<i class="bi bi-patch-check-fill text-consistent ms-1" title="Most consistent"></i>' : ''}</div>
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Most active days in the last 30 (${best})">Consistent</span>` : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
           </div>

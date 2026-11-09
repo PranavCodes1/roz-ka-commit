@@ -79,7 +79,11 @@ body {
 .min-w-0 { min-width: 0; }
 .num, .stat-value, .rank, .handle, .metric b { font-family: var(--app-mono); font-variant-numeric: tabular-nums; }
 .unit { color: var(--app-muted); margin-left: 1px; font-size: 0.85em; }
-.text-consistent { color: var(--app-consistent); }
+.tag-consistent {
+  display: inline-block; vertical-align: 1px;
+  padding: 0 0.4rem; border-radius: 999px; border: 1px solid var(--app-border);
+  font-size: 0.68rem; font-weight: 500; line-height: 1.5; color: var(--app-muted);
+}
 
 /* ---------- nav ---------- */
 .app-nav {
