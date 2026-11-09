@@ -33,25 +33,50 @@
   </nav>
 
   <main class="container-xl py-4">
-    <header class="hero mb-4">
-      <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> ./dashboard --live</p>
-      <h1 class="hero-title">Aaj ka commit, <span class="accent">kal ki progress.</span><span class="cursor" aria-hidden="true"></span></h1>
+    <header class="hero-panel mb-4">
+      <div class="hero-text">
+        <pre class="ascii-logo" aria-hidden="true">██████╗ ██╗  ██╗ ██████╗
+██╔══██╗██║ ██╔╝██╔════╝
+██████╔╝█████╔╝ ██║
+██╔══██╗██╔═██╗ ██║
+██║  ██║██║  ██╗╚██████╗
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝</pre>
+        <p class="prompt mb-2"><span class="p-path">~/roz-ka-commit</span><span class="p-sym">$</span> ./dashboard --live</p>
+        <h1 class="hero-title">Aaj ka commit, <span class="accent glow">kal ki progress.</span><span class="cursor" aria-hidden="true"></span></h1>
+        <div class="chips mt-3"><span class="chip"><i class="bi bi-plus-circle"></i> +10 pts / day</span><span class="chip"><i class="bi bi-fire"></i> streaks</span><span class="chip"><i class="bi bi-github"></i> real public commits</span></div>
+      </div>
+      <svg class="git-graph" viewBox="0 0 360 170" aria-hidden="true" focusable="false">
+        <path class="gg-line gg-main" d="M10 120 H350"/>
+        <path class="gg-line gg-feat" d="M70 120 C100 120 100 60 130 60 H230 C260 60 260 120 290 120"/>
+        <path class="gg-line gg-fix" d="M170 60 C186 60 186 22 200 22 C214 22 214 60 230 60"/>
+        <g class="gg-dot gg-main"><circle cx="30" cy="120" r="7"/><circle cx="70" cy="120" r="7"/><circle cx="180" cy="120" r="7"/><circle cx="290" cy="120" r="9"/><circle cx="335" cy="120" r="7"/></g>
+        <g class="gg-dot gg-feat"><circle cx="130" cy="60" r="7"/><circle cx="170" cy="60" r="7"/><circle cx="230" cy="60" r="7"/></g>
+        <g class="gg-dot gg-fix"><circle cx="200" cy="22" r="6"/></g>
+        <text class="gg-label" x="18" y="148">main</text>
+        <text class="gg-label" x="132" y="84">feat/streaks</text>
+        <text class="gg-label" x="212" y="12">fix</text>
+        <text class="gg-label" x="262" y="148">merge ✓</text>
+      </svg>
     </header>
 
     <div id="pageAlert"></div>
 
     <!-- Today -->
     <section class="row g-3 mb-4" id="statCards">
-      <div class="col-6 col-lg-3"><div class="card stat-card h-100"><div class="card-body">
+      <div class="col-6 col-lg-3"><div class="card stat-card stat-green h-100"><div class="card-body">
+        <i class="bi bi-people-fill stat-icon" aria-hidden="true"></i>
         <div class="stat-label">contributors</div><div class="stat-value" id="statStudents">–</div>
       </div></div></div>
-      <div class="col-6 col-lg-3"><div class="card stat-card h-100"><div class="card-body">
+      <div class="col-6 col-lg-3"><div class="card stat-card stat-blue h-100"><div class="card-body">
+        <i class="bi bi-lightning-charge-fill stat-icon" aria-hidden="true"></i>
         <div class="stat-label">active_today</div><div class="stat-value" id="statActive">–</div>
       </div></div></div>
-      <div class="col-6 col-lg-3"><div class="card stat-card h-100"><div class="card-body">
+      <div class="col-6 col-lg-3"><div class="card stat-card stat-purple h-100"><div class="card-body">
+        <i class="bi bi-git stat-icon" aria-hidden="true"></i>
         <div class="stat-label">commits_today</div><div class="stat-value" id="statCommits">–</div>
       </div></div></div>
-      <div class="col-6 col-lg-3"><div class="card stat-card h-100"><div class="card-body">
+      <div class="col-6 col-lg-3"><div class="card stat-card stat-amber h-100"><div class="card-body">
+        <i class="bi bi-star-fill stat-icon" aria-hidden="true"></i>
         <div class="stat-label">points_today</div><div class="stat-value" id="statPoints">–</div>
       </div></div></div>
     </section>
@@ -120,7 +145,11 @@
   </main>
 
   <footer class="container-xl pb-4 site-foot">
-    <span class="c">//</span> source: GitHub public REST API (public repos, default branches) · tz=<span id="tzName"></span>
+    <div class="foot-rule" aria-hidden="true"></div>
+    <div class="d-flex flex-wrap justify-content-between gap-2">
+      <span><span class="c">//</span> source: GitHub public REST API (public repos, default branches) · tz=<span id="tzName"></span></span>
+      <span>made with <span class="heart">♥</span>, chai &amp; <span class="accent">git push</span></span>
+    </div>
   </footer>
 
   <!-- Contributor detail -->

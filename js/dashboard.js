@@ -63,13 +63,13 @@ function renderLeaderboard(t) {
 
   const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">#${String(rank).padStart(2, '0')}</span>`;
   const body = rows.map((r) => `
-    <tr data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}" tabindex="0" role="button">
+    <tr data-student="${r.student.id}" class="${topIds.has(r.student.id) ? 'consistent-row' : ''}${r.rank <= 3 && r.points > 0 ? ` podium podium-${r.rank}` : ''}" tabindex="0" role="button">
       <td class="text-center">${medal(r.rank)}</td>
       <td>
         <div class="d-flex align-items-center gap-2">
           ${avatar(r.student)}
           <div class="min-w-0">
-            <div class="fw-semibold text-truncate">${esc(r.student.name)}
+            <div class="fw-semibold text-truncate">${r.rank === 1 && r.points > 0 ? '<i class="bi bi-trophy-fill trophy me-1" title="Leader"></i>' : ''}${esc(r.student.name)}
               ${topIds.has(r.student.id) ? '<i class="bi bi-gem text-info ms-1" title="Most consistent"></i>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} <i class="bi bi-box-arrow-up-right"></i></a>

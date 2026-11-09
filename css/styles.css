@@ -274,3 +274,125 @@ body {
 /* alerts a little calmer in the terminal look */
 .alert { border-radius: 8px; font-size: 0.82rem; }
 code { color: var(--rkc-purple); }
+
+/* =====================================================================
+   Decorative layer — glows, gradients, hero art. Static (no animation)
+   apart from the prompt cursor, which respects reduced motion.
+   ===================================================================== */
+:root,
+[data-bs-theme="light"] {
+  --glow-green: rgba(26, 127, 55, 0.10);
+  --glow-blue: rgba(9, 105, 218, 0.08);
+  --glow-purple: rgba(130, 80, 223, 0.08);
+  --glow-strong: transparent;
+  --card-shadow: 0 10px 28px -20px rgba(31, 35, 40, 0.35);
+  --rkc-rainbow: linear-gradient(90deg, var(--rkc-green), var(--rkc-blue), var(--rkc-purple));
+}
+[data-bs-theme="dark"] {
+  --glow-green: rgba(57, 211, 83, 0.16);
+  --glow-blue: rgba(88, 166, 255, 0.13);
+  --glow-purple: rgba(188, 140, 255, 0.11);
+  --glow-strong: rgba(57, 211, 83, 0.45);
+  --card-shadow: 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+}
+
+/* soft neon light behind the page */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(620px 420px at 6% -6%, var(--glow-green), transparent 70%),
+    radial-gradient(540px 400px at 96% 8%, var(--glow-blue), transparent 70%),
+    radial-gradient(760px 520px at 50% 112%, var(--glow-purple), transparent 70%);
+}
+
+.brand-mark { box-shadow: 0 0 14px var(--glow-green); }
+.glow { text-shadow: 0 0 22px var(--glow-strong); }
+.heart { color: #ff6b81; }
+
+/* ---------- hero banner ---------- */
+.hero-panel {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 2rem;
+  padding: 1.75rem 2rem;
+  border: 1px solid var(--rkc-border); border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--rkc-surface) 94%, transparent), color-mix(in srgb, var(--rkc-bar) 70%, transparent));
+  box-shadow: var(--card-shadow);
+}
+.hero-panel::before { /* faint CRT scanlines */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(127, 127, 127, 0.035) 3px 4px);
+}
+.hero-panel::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--rkc-rainbow); }
+.hero-text { position: relative; min-width: 0; }
+.ascii-logo {
+  margin: 0 0 1rem; overflow: hidden;
+  font-family: var(--rkc-font); font-weight: 700;
+  font-size: clamp(7px, 1.05vw, 11px); line-height: 1; letter-spacing: 0;
+  background: linear-gradient(90deg, var(--rkc-green), var(--rkc-blue) 65%, var(--rkc-purple));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px var(--glow-green));
+}
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.72rem;
+  color: var(--rkc-muted); background: var(--rkc-bar); border: 1px solid var(--rkc-border);
+}
+.chip i { color: var(--rkc-green); }
+
+/* hand-drawn git history */
+.git-graph { position: relative; width: 340px; flex-shrink: 0; filter: drop-shadow(0 0 8px var(--glow-green)); }
+.gg-line { fill: none; stroke-width: 3; stroke-linecap: round; }
+.gg-line.gg-main { stroke: var(--rkc-green); }
+.gg-line.gg-feat { stroke: var(--rkc-blue); }
+.gg-line.gg-fix { stroke: var(--rkc-purple); }
+.gg-dot circle { stroke-width: 3; fill: var(--rkc-surface); }
+.gg-dot.gg-main circle { stroke: var(--rkc-green); }
+.gg-dot.gg-main circle:nth-child(4) { fill: var(--rkc-green); }
+.gg-dot.gg-feat circle { stroke: var(--rkc-blue); }
+.gg-dot.gg-fix circle { stroke: var(--rkc-purple); }
+.gg-label { fill: var(--rkc-muted); font-size: 11px; font-family: var(--rkc-font); }
+@media (max-width: 991.98px) {
+  .git-graph { display: none; }
+  .hero-panel { padding: 1.25rem; }
+}
+
+/* ---------- cards ---------- */
+.card { box-shadow: var(--card-shadow); transition: border-color 0.2s, box-shadow 0.2s; }
+.card:hover { border-color: color-mix(in srgb, var(--rkc-green) 30%, var(--rkc-border)); }
+.term-bar { position: relative; }
+.term-bar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--rkc-rainbow); opacity: 0.55;
+}
+.modal-header { border-bottom: 1px solid transparent; border-image: var(--rkc-rainbow) 1; }
+
+/* ---------- colour-coded stat cards ---------- */
+.stat-green { --stat: var(--rkc-green); }
+.stat-blue { --stat: var(--rkc-blue); }
+.stat-purple { --stat: var(--rkc-purple); }
+.stat-amber { --stat: var(--rkc-amber); }
+.stat-card {
+  background:
+    radial-gradient(130% 120% at 100% 0%, color-mix(in srgb, var(--stat, var(--rkc-green)) 14%, transparent), transparent 55%),
+    var(--rkc-surface);
+}
+.stat-card::before { background: var(--stat, var(--rkc-green)); }
+.stat-card .stat-value { color: var(--stat, var(--rkc-green)); }
+[data-bs-theme="dark"] .stat-card .stat-value { text-shadow: 0 0 22px color-mix(in srgb, var(--stat, var(--rkc-green)) 45%, transparent); }
+.stat-card .card-body { position: relative; }
+.stat-icon {
+  position: absolute; right: -4px; bottom: -18px; font-size: 4.6rem; line-height: 1;
+  color: var(--stat, var(--rkc-green)); opacity: 0.12; transform: rotate(-12deg); pointer-events: none;
+}
+
+/* ---------- leaderboard podium ---------- */
+tr.podium-1 { background: linear-gradient(90deg, rgba(242, 204, 96, 0.13), transparent 65%); }
+tr.podium-2 { background: linear-gradient(90deg, rgba(201, 209, 217, 0.09), transparent 65%); }
+tr.podium-3 { background: linear-gradient(90deg, rgba(240, 136, 62, 0.10), transparent 65%); }
+.trophy { color: #f2cc60; filter: drop-shadow(0 0 6px rgba(242, 204, 96, 0.6)); }
+[data-bs-theme="light"] .trophy { color: #bf8700; filter: none; }
+
+/* ---------- footer ---------- */
+.foot-rule { height: 1px; background: var(--rkc-rainbow); opacity: 0.5; margin-bottom: 0.9rem; }
