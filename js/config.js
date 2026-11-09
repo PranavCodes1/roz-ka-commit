@@ -4,8 +4,8 @@
 // It is designed to be shipped to browsers: Row Level Security decides what it can do.
 // NEVER put the service_role / secret key here — the app refuses to start if you do.
 export const CONFIG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT-REF.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-SUPABASE-ANON-OR-PUBLISHABLE-KEY',
+  SUPABASE_URL: 'https://qloednlepemeiwbwaakq.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_FiV38EgfGAvGDBV8aRiz5Q__x_TaiFy',
 
   // Which calendar day a commit counts for. Must match rkc_timezone() in supabase/schema.sql.
   TIMEZONE: 'Asia/Kolkata',
