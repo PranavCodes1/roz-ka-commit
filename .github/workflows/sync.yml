@@ -28,27 +28,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - name: Check secrets
+      - name: Check settings
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SECRET_URL: ${{ secrets.SUPABASE_URL }}
+          SECRET_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VAR_URL: ${{ vars.SUPABASE_URL }}
+          VAR_KEY_SET: ${{ vars.SUPABASE_SERVICE_ROLE_KEY != '' }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::error::Add the SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY repository secrets (see README → Automatic sync)."
-            exit 1
+          ok=1
+          if [ -z "$SECRET_URL" ] && [ -z "$VAR_URL" ]; then
+            echo "::error title=SUPABASE_URL missing::No repository secret or variable named SUPABASE_URL is visible to this workflow. Add it under Settings → Secrets and variables → Actions (not Environments, Codespaces or Dependabot), spelled exactly SUPABASE_URL."
+            ok=0
           fi
+          if [ -z "$SECRET_KEY" ]; then
+            if [ "$VAR_KEY_SET" = "true" ]; then
+              echo "::error title=Key saved as a Variable::SUPABASE_SERVICE_ROLE_KEY was added on the Variables tab, where it is stored in plain text. Delete that variable, create a new secret key in Supabase (and delete the exposed one), then add it on the Secrets tab."
+            else
+              echo "::error title=SUPABASE_SERVICE_ROLE_KEY missing::No repository secret named SUPABASE_SERVICE_ROLE_KEY is visible to this workflow. Add it on the Secrets tab under Settings → Secrets and variables → Actions (not Environments, Codespaces or Dependabot), spelled exactly SUPABASE_SERVICE_ROLE_KEY."
+            fi
+            ok=0
+          fi
+          [ "$ok" = 1 ] || exit 1
+          echo "Settings found."
 
       - name: Sync contributors from GitHub
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # The project URL is not sensitive, so it may be a secret or a plain variable.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GITHUB_TOKEN: ${{ github.token }} # raises the GitHub search limit to 30 requests/min
         run: |
