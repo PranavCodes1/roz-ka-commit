@@ -134,7 +134,7 @@ rights, because only admins may write commits.
 
 ### Automatic sync (GitHub Actions)
 `.github/workflows/sync.yml` runs `scripts/sync.js` (the same logic as **Refresh all from GitHub**)
-**every 3 hours**, including 23:47 IST just before each day ends, so points are recorded without anyone clicking Refresh.
+**every hour** (at :17), including 23:47 IST just before each day ends, so points are recorded without anyone clicking Refresh.
 It runs on GitHub's servers (free for public repositories), so your computer doesn't need to be on.
 
 Setup (once):

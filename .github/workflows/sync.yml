@@ -9,10 +9,11 @@ name: Sync GitHub activity
 
 on:
   schedule:
-    # Every 3 hours at :17 (GitHub cron is UTC; :17 avoids the busy top of the hour).
+    # Every hour at :17 (GitHub cron is UTC; :17 avoids the busy top of the hour).
     # 18:17 UTC = 23:47 IST, so each India day gets a final sync just before it ends.
     # Commits pushed after that are still caught later (each sync re-checks 14 days).
-    - cron: '17 */3 * * *'
+    # Free: Actions minutes are unlimited for public repositories (~30 s per run).
+    - cron: '17 * * * *'
   workflow_dispatch: # "Run workflow" button in the Actions tab
 
 permissions:
