@@ -47,7 +47,7 @@ test('leaderboard: points per period, 10 per active day regardless of commit cou
     act(3, day(-20), 2),
   ];
   const today = buildLeaderboard(students, activity, 'today', T);
-  assert.deepEqual(today.map((r) => [r.student.id, r.points, r.commits, r.rank]), [[1, 10, 7, 1], [2, 10, 1, 1], [3, 0, 0, 3]]);
+  assert.deepEqual(today.map((r) => [r.student.id, r.points, r.commits, r.rank]), [[1, 10, 7, 1], [2, 10, 1, 1], [3, 0, 0, 2]]); // dense: 1, 1, 2
 
   const week = buildLeaderboard(students, activity, 'week', T); // week = Mon Nov 9 only
   assert.equal(week.find((r) => r.student.id === 2).points, 10);
@@ -59,6 +59,20 @@ test('leaderboard: points per period, 10 per active day regardless of commit cou
   assert.equal(bilal.currentStreak, 2);
   assert.equal(bilal.totalPoints, 30);
   assert.equal(bilal.consistency, 2); // day -40 is outside the 30-day window
+});
+
+test('leaderboard: dense ranking (ties share a rank, no gaps)', () => {
+  const five = [1, 2, 3, 4, 5].map((id) => ({ id, name: `P${id}`, github_username: `p${id}` }));
+  const activity = [
+    act(1, T), act(1, day(-1)), act(1, day(-2)), // 30
+    act(2, T), act(2, day(-1)), act(2, day(-2)), // 30
+    act(3, T), act(3, day(-1)),                  // 20
+    act(4, T), act(4, day(-1)),                  // 20
+  ];                                             // 5: 0
+  const rows = buildLeaderboard(five, activity, 'all', T);
+  assert.deepEqual(rows.map((r) => [r.points, r.rank]), [[30, 1], [30, 1], [20, 2], [20, 2], [0, 3]]);
+  // everyone tied (e.g. nobody has committed yet) -> all rank 1
+  assert.deepEqual(buildLeaderboard(five, [], 'all', T).map((r) => r.rank), [1, 1, 1, 1, 1]);
 });
 
 test('leaderboard: no student exceeds 10 points per day', () => {

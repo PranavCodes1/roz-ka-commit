@@ -68,10 +68,11 @@ function renderLeaderboard(t) {
   const best = top[0]?.consistency ?? 0;
   const topIds = new Set(best >= CONSISTENT_MIN_DAYS ? top.filter((r) => r.consistency === best).map((r) => r.student.id) : []);
 
-  const medal = (rank) => `<span class="rank${rank <= 3 ? ` rank-${rank}` : ''}">${rank}</span>`;
+  // Gold/silver/bronze tint for ranks 1-3, but only for contributors who have points.
+  const medal = (rank, points) => `<span class="rank${rank <= 3 && points > 0 ? ` rank-${rank}` : ''}">${rank}</span>`;
   const body = rows.map((r) => `
     <tr data-student="${r.student.id}" tabindex="0" role="button">
-      <td class="text-center">${medal(r.rank)}</td>
+      <td class="text-center">${medal(r.rank, r.points)}</td>
       <td>
         <div class="d-flex align-items-center gap-2">
           ${avatar(r.student)}

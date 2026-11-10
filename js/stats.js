@@ -58,7 +58,8 @@ export const CONSISTENCY_WINDOW = 30;
 
 /**
  * One row per student with period totals plus all-time stats, sorted and ranked.
- * Ranking: points desc → active days desc → commits desc → name. Equal points share a rank.
+ * Order: points desc → active days desc → commits desc → name.
+ * Dense ranking by points: equal points share a rank and the next rank follows on (1, 1, 2).
  */
 export function buildLeaderboard(students, activity, filter, today) {
   const range = periodRange(filter, today);
@@ -88,7 +89,7 @@ export function buildLeaderboard(students, activity, filter, today) {
     a.student.name.localeCompare(b.student.name));
 
   rows.forEach((r, i) => {
-    r.rank = i > 0 && rows[i - 1].points === r.points ? rows[i - 1].rank : i + 1;
+    r.rank = i === 0 ? 1 : rows[i - 1].points === r.points ? rows[i - 1].rank : rows[i - 1].rank + 1;
   });
   return rows;
 }

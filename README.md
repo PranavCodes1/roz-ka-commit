@@ -37,6 +37,8 @@ Commits from before that date are never stored, so they give no points, streaks 
   that day, one at 23:30 IST for the day before.
 - **Where it's enforced:** points are calculated **in the database** by triggers, not in the browser. A `CHECK` constraint makes
   more than 10 points per day impossible. All history is kept in `daily_activity`.
+- **Ranking:** by points, using **dense ranking**: contributors with equal points share a rank and the next rank
+  follows on (1, 1, 2, …). Within a tie, rows are ordered by active days, then commits, then name.
 - **Streaks:** the current streak counts consecutive days with a commit. It survives until the end of today, so a streak
   ending yesterday still counts if you haven't committed yet today. The best streak is the longest run ever.
 - **Most consistent:** the panel lists the 3 contributors with the most active days in the last 30 (ties: current streak,
