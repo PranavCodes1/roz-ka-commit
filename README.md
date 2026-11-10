@@ -157,6 +157,46 @@ To try it locally instead: `python3 -m http.server 8080` and open http://localho
   repository activity**. It emails you first; click *Enable workflow* in the Actions tab (or push anything) to resume.
 - **Running it yourself:** the same sync works locally. Copy `.env.example` to `.env`, fill it in, and run `npm run sync`.
 
+### Backup trigger: cron-job.org (recommended)
+GitHub's own schedule is best-effort: runs can start late, and at busy times some are skipped entirely.
+A free [cron-job.org](https://cron-job.org) job starts the same workflow every hour through GitHub's API, as a backup.
+It runs at **:17 India time (:47 UTC)**, between GitHub's own :17 UTC runs. Overlapping runs are queued, and a repeated
+sync just finds 0 new commits, so running both is harmless.
+
+1. **Create a GitHub token that can only start workflows.** GitHub → your avatar → **Settings → Developer settings →
+   Personal access tokens → Fine-grained tokens → Generate new token**:
+   - **Name:** `rkc-cron-job-org`; **Expiration:** up to 1 year (put a reminder in your calendar to renew it)
+   - **Repository access:** *Only select repositories* → `roz-ka-commit`
+   - **Permissions → Repository permissions → Actions: Read and write** (nothing else)
+   - Generate and copy the token (`github_pat_…`).
+2. **cron-job.org → sign up (free) → Create cronjob**:
+   - **Title:** `RKC hourly sync`
+   - **URL:** `https://api.github.com/repos/PranavCodes1/roz-ka-commit/actions/workflows/sync.yml/dispatches`
+   - **Execution schedule:** *Custom* → minutes `17`, every hour, every day; **Time zone:** `Asia/Kolkata`
+   - **Advanced → Request method:** `POST`
+   - **Advanced → Headers:**
+
+     | Key | Value |
+     |---|---|
+     | `Authorization` | `Bearer github_pat_…` (your token) |
+     | `Accept` | `application/vnd.github+json` |
+     | `X-GitHub-Api-Version` | `2022-11-28` |
+     | `Content-Type` | `application/json` |
+
+   - **Advanced → Request body:** `{"ref":"main"}`
+   - Under **Notifications**, tick *notify me when an execution fails*.
+3. Click **Test run**. The response must be **`204 No Content`**, and a new run appears within seconds under
+   **Actions → Sync GitHub activity** (event: `workflow_dispatch`). Then save the job.
+
+| cron-job.org shows | Meaning |
+|---|---|
+| `204` | Working. |
+| `401 Bad credentials` | Token wrong, expired or missing `Bearer `. |
+| `403` / `404 Not Found` | The token can't see the repository, or lacks **Actions: Read and write**. |
+| `422` | Body isn't `{"ref":"main"}`, or the method isn't `POST`. |
+
+When the token expires, generate a new one the same way and paste it into the job's `Authorization` header.
+
 ### Troubleshooting the automatic sync
 Failed runs are emailed to you. Open the run: the reason is shown in a red box at the top.
 
@@ -177,10 +217,11 @@ Everything runs on free tiers.
 
 | Service | Usage | Free limit |
 |---|---|---|
-| GitHub Actions (hourly sync) | ~24 runs/day × ~30 s | **Unlimited** minutes for public repositories (2,000 min/month if the repo were private) |
+| GitHub Actions (hourly sync + cron-job.org backup) | ~24–48 runs/day × ~30 s | **Unlimited** minutes for public repositories (2,000 min/month if the repo were private) |
 | GitHub search API | ~1 request per contributor per run | 30 requests/minute with the Actions token |
 | Supabase | a few small requests per run; one short row per commit | No API request cap; 500 MB database |
 | GitHub Pages | static files | Free for public repositories |
+| cron-job.org | 1 request/hour | Free |
 
 Supabase pauses free projects after 7 days without activity; the hourly sync keeps the project active.
 
