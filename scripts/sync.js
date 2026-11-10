@@ -44,9 +44,16 @@ const store = {
   },
 };
 
-const trackingStart = await rest('rpc/rkc_tracking_start', { method: 'POST', body: {} }).catch(() => null);
-if (!trackingStart) {
-  console.error('rkc_tracking_start() is missing: re-run supabase/schema.sql first.');
+let trackingStart;
+try {
+  trackingStart = await rest('rpc/rkc_tracking_start', { method: 'POST', body: {} });
+} catch (err) {
+  // A 404 / PGRST202 means the function doesn't exist; anything else is a
+  // connection or key problem, so show the real error.
+  const missing = /\b404\b|PGRST202/.test(err.message);
+  console.error(missing
+    ? 'rkc_tracking_start() is missing: re-run supabase/schema.sql first.'
+    : `Could not reach Supabase — check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.\n${err.cause?.message || err.message}`);
   process.exit(1);
 }
 
@@ -66,5 +73,16 @@ const results = await syncAll(students, {
   : `  ✗ @${r.student.github_username}: ${r.error.message}`));
 
 const failed = results.filter((r) => !r.ok).length + (students.length - results.length);
+
+// In GitHub Actions, surface per-contributor problems as warnings on the run page
+// (the run itself only fails when nothing could be synced).
+if (process.env.GITHUB_ACTIONS === 'true') {
+  for (const r of results.filter((x) => !x.ok)) {
+    console.log(`::warning title=Sync failed for @${r.student.github_username}::${r.error.message.replace(/\r?\n/g, ' ')}`);
+  }
+  if (students.length > results.length) {
+    console.log(`::warning title=Sync stopped early::${students.length - results.length} contributor(s) skipped because of the GitHub rate limit; the next run will catch up.`);
+  }
+}
 console.log(`Done. ${results.length - failed} ok, ${failed} failed/skipped.`);
 process.exit(failed && failed === students.length ? 1 : 0);

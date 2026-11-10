@@ -1,33 +1,58 @@
-# OPTIONAL scheduled sync. The admin "Refresh" button works without this.
-# Enable by adding repository secrets SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
-# (Settings → Secrets and variables → Actions). The service key stays in GitHub's
-# secret store and is never part of the website.
+# Automatic GitHub → Supabase sync for Roz Ka Commit.
+#
+# Runs scripts/sync.js (the same logic as the admin page's "Refresh all from GitHub").
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL                https://<project-ref>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY   a Supabase *secret* key (sb_secret_…) — server-side only
+# The secret key lives in GitHub's encrypted secret store; it is never part of the website.
 name: Sync GitHub activity
 
 on:
   schedule:
-    - cron: '0 18 * * *'   # 18:00 UTC = 23:30 IST, before the day ends in India
-  workflow_dispatch:
+    # Every 3 hours at :17 (GitHub cron is UTC; :17 avoids the busy top of the hour).
+    # 18:17 UTC = 23:47 IST, so each India day gets a final sync just before it ends.
+    # Commits pushed after that are still caught later (each sync re-checks 14 days).
+    - cron: '17 */3 * * *'
+  workflow_dispatch: # "Run workflow" button in the Actions tab
 
 permissions:
   contents: read
 
+concurrency: # never run two syncs at once
+  group: rkc-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Sync
+
+      - name: Check secrets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "Secrets not configured; skipping scheduled sync."; exit 0
+            echo "::error::Add the SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY repository secrets (see README → Automatic sync)."
+            exit 1
           fi
-          node scripts/sync.js
+
+      - name: Sync contributors from GitHub
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }} # raises the GitHub search limit to 30 requests/min
+        run: |
+          set +e
+          node scripts/sync.js 2>&1 | tee sync.log
+          status=${PIPESTATUS[0]}
+          { echo '### Roz Ka Commit sync'; echo '```'; grep -v '^::' sync.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

@@ -132,11 +132,26 @@ rights, because only admins may write commits.
   Git dates can be faked; people really do push "2099" commits.
 - Search returns at most 1000 results per query, so busy date ranges are automatically split in half until each fits.
 
-### Optional: automatic daily sync
-`.github/workflows/sync.yml` runs `scripts/sync.js` every day at 23:30 IST, so points are recorded even if nobody clicks Refresh.
-To enable it, add repository secrets **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`**
-(Settings → Secrets and variables → Actions). The service key lives only in GitHub's encrypted secret store, never in the website.
-You can also run it yourself: copy `.env.example` to `.env`, fill it in, and run `npm run sync`.
+### Automatic sync (GitHub Actions)
+`.github/workflows/sync.yml` runs `scripts/sync.js` (the same logic as **Refresh all from GitHub**)
+**every 3 hours**, including 23:47 IST just before each day ends, so points are recorded without anyone clicking Refresh.
+It runs on GitHub's servers (free for public repositories), so your computer doesn't need to be on.
+
+Setup (once):
+1. **Supabase → Project Settings → API Keys → Secret keys → Add new secret key**. Name it e.g. `github-actions`, and copy it (`sb_secret_…`).
+   A separate key can be revoked on its own without affecting anything else.
+2. **GitHub repo → Settings → Secrets and variables → Actions → New repository secret**, add:
+   - `SUPABASE_URL`: your project URL, e.g. `https://abcdefghijkl.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY`: the secret key from step 1
+3. **Actions tab → Sync GitHub activity → Run workflow** to test it now. The run page shows a summary
+   (commits found / new per contributor). Problems with a single contributor appear as yellow warnings;
+   a wrong URL or key fails the run, and GitHub emails you about failed runs.
+
+Notes: GitHub may start scheduled runs a few minutes late at busy times. GitHub pauses scheduled workflows in a public
+repository after **60 days without any repository activity**. It emails you first, and one click on *Enable workflow*
+in the Actions tab (or any push) turns it back on.
+The secret key lives only in GitHub's encrypted secret store; it is never part of the website.
+You can also run the same sync yourself: copy `.env.example` to `.env`, fill it in, and run `npm run sync`.
 
 ## GitHub API limitations (please read)
 
