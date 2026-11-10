@@ -77,7 +77,7 @@ function explain(err) {
   const m = err.message || '';
   if (/\b404\b|PGRST202/.test(m)) return ['Database not set up', 'rkc_tracking_start() is missing: re-run supabase/schema.sql in the Supabase SQL Editor.'];
   if (/\b401\b|Invalid API key|invalid.*key/i.test(m)) return ['Supabase rejected the key', 'SUPABASE_SERVICE_ROLE_KEY was not accepted. Copy a secret key again from Supabase → Project Settings → API Keys → Secret keys, and make sure it belongs to this project.'];
-  if (/42501|permission denied/i.test(m)) return ['Key has no write access', 'The key works but cannot write. Use a SECRET key (sb_secret_…), not the publishable/anon key.'];
+  if (/42501|permission denied/i.test(m)) return ['Key has no write access', 'Supabase accepted the key but the database refused access. Re-run supabase/schema.sql in the Supabase SQL Editor (it grants the service_role access), and make sure this is a SECRET key (sb_secret_…).'];
   return ['Could not reach Supabase', `Check SUPABASE_URL (${url}). ${err.cause?.message || m}`.slice(0, 400)];
 }
 

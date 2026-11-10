@@ -241,6 +241,13 @@ grant execute on function public.rkc_rebuild_daily_activity() to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.rkc_tracking_start() to anon, authenticated;
 
+-- service_role = the server-side secret key used by the scheduled sync
+-- (scripts/sync.js / GitHub Actions). It bypasses RLS but still needs table
+-- privileges, which newer Supabase projects no longer grant automatically.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.students, public.commits, public.daily_activity, public.admins to service_role;
+grant execute on function public.rkc_tracking_start(), public.is_admin(), public.rkc_rebuild_daily_activity() to service_role;
+
 -- admins
 drop policy if exists "admins: read own row" on public.admins;
 create policy "admins: read own row" on public.admins
