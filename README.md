@@ -37,6 +37,8 @@ Commits from before that date are never stored, so they give no points, streaks 
     ("author: None"). Only the owner, or people they invite, can push there.
 
   A commit linked to a **different** GitHub account never counts, even inside the contributor's own repository.
+- **Private repositories:** RKC can't see them, so an admin records that work by hand after checking it (see
+  [Private repository contributions](#private-repository-contributions)). It counts for that day like public commits.
 - **Days** are counted in **India time** (`Asia/Kolkata`) using the commit's author date: a commit at 00:30 IST counts for
   that day, one at 23:30 IST for the day before.
 - **Where it's enforced:** points are calculated **in the database** by triggers, not in the browser. A `CHECK` constraint makes
@@ -134,7 +136,29 @@ To try it locally instead: `python3 -m http.server 8080` and open http://localho
 - **Edit** a name freely. Changing a **GitHub username** deletes that contributor's old commits and points (they belonged
   to another account) and re-syncs from the new one.
 - **Remove** a contributor to delete them with all their commits and points.
+- **Private repository work:** see below.
 - The dashboard's **Refresh** button just reloads the latest data from Supabase.
+
+## Private repository contributions
+
+RKC only reads public data, so commits in **private** repositories are recorded by an admin after checking them.
+RKC never needs access to private repositories.
+
+1. The contributor shares the private repository with the admin on GitHub
+   (repo → **Settings → Collaborators → Add people** → the admin's GitHub account).
+2. The admin opens the repository on GitHub and checks the contributor's commits for that day.
+3. On the admin page, **Private repository contributions**: choose the contributor, paste the repository link, pick the
+   date and enter the number of commits checked (optionally a note, e.g. the commit SHAs) → **Add verified contribution**.
+
+Rules (enforced by the database):
+- it counts for that day exactly like public commits: **10 points per active day**, no matter how many commits or repositories;
+- the date must be between the start date and today; one entry per contributor, repository and day;
+- removing the entry removes its commits (and the day's points if nothing else counts that day);
+- **privacy:** the public dashboard only shows *"N commits in a private repository · verified by admin"* and a 🔒 next to
+  the name. The repository link and the note are visible to admins only.
+
+If the repository later becomes **public**, the hourly sync will also find those commits. Points stay the same (one per
+day), but the commit count would include them twice, so remove the manual entry then.
 
 ## How the sync works
 
@@ -255,7 +279,9 @@ Supabase pauses free projects after 7 days without activity; the hourly sync kee
   - anyone can `SELECT` contributors (`students`), commits and daily activity (that's the public dashboard);
   - writes to `students` and `commits` require `public.is_admin()`, i.e. the signed-in user is listed in `admins`;
   - nobody can write `daily_activity` directly; only the `SECURITY DEFINER` triggers do;
-  - `admins` cannot be modified through the API at all (SQL Editor only).
+  - `admins` cannot be modified through the API at all (SQL Editor only);
+  - `manual_contributions` (private-repo work): anyone can see date and commit count, only admins can add/remove entries,
+    and the repository link and note can only be read by admins (column privileges + an admin-only function).
 - **Table privileges** are also granted explicitly per role as a second layer.
 - **Admin sign-in** uses Supabase Auth (email + password). Hiding the admin UI is cosmetic; the database enforces the rules.
 

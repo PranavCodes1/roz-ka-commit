@@ -8,6 +8,7 @@
 -- Points rules (enforced here, in the database, not in the browser):
 --   * only commits made on/after rkc_tracking_start() count (see Settings)
 --   * points are per DAY, not per commit:
+--   * verified private-repo work (manual_contributions) counts like commits
 --   * first qualifying commit of a day  -> 10 points
 --   * more commits on the same day      -> 0 extra points
 --   * no commits                        -> 0 points (no row)
@@ -192,7 +193,114 @@ create trigger students_before_update
   before update on public.students
   for each row execute function public.rkc_students_before_update();
 
--- Maintenance: rebuild daily_activity from commits (e.g. after changing
+-- ---------------------------------------------------------------------
+-- manual_contributions: work in PRIVATE repositories, verified by an admin.
+-- The contributor shares the private repo with the admin on GitHub; the admin
+-- checks the commits there and records them here. They count for that day
+-- exactly like commits (10 points per active day). RKC itself never needs
+-- access to private repositories.
+-- repo_url and note are visible to admins only (column privileges below).
+-- ---------------------------------------------------------------------
+create table if not exists public.manual_contributions (
+  id            bigint  generated always as identity primary key,
+  student_id    bigint  not null references public.students (id) on delete cascade,
+  activity_date date    not null,
+  commit_count  integer not null check (commit_count between 1 and 100),
+  repo_url      text    not null check (repo_url ~ '^https://github\.com/[a-z0-9-]+/[a-z0-9._-]+$'),
+  note          text    check (char_length(note) <= 300),
+  added_by      uuid    default auth.uid() references auth.users (id) on delete set null,
+  created_at    timestamptz not null default now(),
+  constraint manual_contributions_once_per_day unique (student_id, repo_url, activity_date)
+);
+
+create index if not exists manual_contributions_day_idx on public.manual_contributions (student_id, activity_date);
+
+-- Recompute one day from both sources (GitHub commits + verified private work).
+create or replace function public.rkc_refresh_day(p_student bigint, p_day date)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+declare total integer;
+begin
+  if not exists (select 1 from public.students where id = p_student) then
+    return;  -- the contributor is being deleted
+  end if;
+  select (select count(*) from public.commits where student_id = p_student and commit_date = p_day)
+       + coalesce((select sum(commit_count) from public.manual_contributions
+                    where student_id = p_student and activity_date = p_day), 0)
+    into total;
+  if total <= 0 then
+    delete from public.daily_activity where student_id = p_student and activity_date = p_day;
+  else
+    insert into public.daily_activity (student_id, activity_date, commit_count, points)
+    values (p_student, p_day, total, public.rkc_daily_points(total))
+    on conflict (student_id, activity_date) do update
+       set commit_count = excluded.commit_count,
+           points       = excluded.points,
+           updated_at   = now();
+  end if;
+end $$;
+
+-- Normalise the link and keep dates within the tracking period.
+create or replace function public.rkc_manual_before_write()
+returns trigger language plpgsql
+set search_path = public
+as $$
+begin
+  -- strip trailing slashes first, then ".git" (so ".../repo.git/" becomes ".../repo")
+  new.repo_url := lower(regexp_replace(regexp_replace(btrim(new.repo_url), '/+$', ''), '\.git$', ''));
+  new.note := nullif(btrim(new.note), '');
+  if new.activity_date < public.rkc_tracking_start() then
+    raise exception 'The date is before points started (%).', public.rkc_tracking_start() using errcode = '23514';
+  end if;
+  if new.activity_date > (now() at time zone public.rkc_timezone())::date then
+    raise exception 'The date is in the future.' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists manual_contributions_before_write on public.manual_contributions;
+create trigger manual_contributions_before_write
+  before insert or update on public.manual_contributions
+  for each row execute function public.rkc_manual_before_write();
+
+create or replace function public.rkc_manual_after_write()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    perform public.rkc_refresh_day(old.student_id, old.activity_date);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    perform public.rkc_refresh_day(new.student_id, new.activity_date);
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists manual_contributions_after_write on public.manual_contributions;
+create trigger manual_contributions_after_write
+  after insert or update or delete on public.manual_contributions
+  for each row execute function public.rkc_manual_after_write();
+
+-- Admin view of all private-repo entries, including the admin-only columns.
+create or replace function public.rkc_admin_manual_contributions()
+returns table (id bigint, student_id bigint, activity_date date, commit_count integer,
+               repo_url text, note text, created_at timestamptz)
+language plpgsql stable security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'admin only' using errcode = '42501';
+  end if;
+  return query
+    select m.id, m.student_id, m.activity_date, m.commit_count, m.repo_url, m.note, m.created_at
+      from public.manual_contributions m
+     order by m.activity_date desc, m.id desc;
+end $$;
+
+-- Maintenance: rebuild daily_activity from commits + private-repo entries (e.g. after changing
 -- rkc_timezone()). Admin only.  Usage:  select public.rkc_rebuild_daily_activity();
 create or replace function public.rkc_rebuild_daily_activity()
 returns integer language plpgsql security definer
@@ -209,10 +317,14 @@ begin
      set commit_date = (committed_at at time zone public.rkc_timezone())::date
    where commit_date <> (committed_at at time zone public.rkc_timezone())::date;
   delete from public.commits where commit_date < public.rkc_tracking_start();
+  delete from public.manual_contributions where activity_date < public.rkc_tracking_start();
   delete from public.daily_activity where true;
   insert into public.daily_activity (student_id, activity_date, commit_count, points)
-  select student_id, commit_date, count(*), public.rkc_daily_points(count(*)::int)
-    from public.commits group by student_id, commit_date;
+  select student_id, day, sum(cnt), public.rkc_daily_points(sum(cnt)::int)
+    from (select student_id, commit_date as day, count(*)::int as cnt from public.commits group by 1, 2
+          union all
+          select student_id, activity_date, sum(commit_count)::int from public.manual_contributions group by 1, 2) x
+   group by student_id, day;
   get diagnostics n = row_count;
   return n;
 end $$;
@@ -228,6 +340,7 @@ alter table public.admins         enable row level security;
 alter table public.students       enable row level security;
 alter table public.commits        enable row level security;
 alter table public.daily_activity enable row level security;
+alter table public.manual_contributions enable row level security;
 
 -- Table privileges (defence in depth on top of RLS)
 revoke all on public.admins, public.students, public.commits, public.daily_activity from anon, authenticated;
@@ -241,11 +354,22 @@ grant execute on function public.rkc_rebuild_daily_activity() to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.rkc_tracking_start() to anon, authenticated;
 
+-- manual_contributions: everyone sees that private work exists (date, count);
+-- only admins see which repository and the note (via rkc_admin_manual_contributions()).
+revoke all on public.manual_contributions from anon, authenticated;
+grant select (id, student_id, activity_date, commit_count, created_at) on public.manual_contributions to anon, authenticated;
+grant insert (student_id, activity_date, commit_count, repo_url, note) on public.manual_contributions to authenticated;
+grant update (activity_date, commit_count, repo_url, note) on public.manual_contributions to authenticated;
+grant delete on public.manual_contributions to authenticated;
+revoke all on function public.rkc_admin_manual_contributions() from public, anon;
+grant execute on function public.rkc_admin_manual_contributions() to authenticated;
+revoke all on function public.rkc_refresh_day(bigint, date) from public, anon, authenticated;
+
 -- service_role = the server-side secret key used by the scheduled sync
 -- (scripts/sync.js / GitHub Actions). It bypasses RLS but still needs table
 -- privileges, which newer Supabase projects no longer grant automatically.
 grant usage on schema public to service_role;
-grant select, insert, update, delete on public.students, public.commits, public.daily_activity, public.admins to service_role;
+grant select, insert, update, delete on public.students, public.commits, public.daily_activity, public.admins, public.manual_contributions to service_role;
 grant execute on function public.rkc_tracking_start(), public.is_admin(), public.rkc_rebuild_daily_activity() to service_role;
 
 -- admins
@@ -288,9 +412,27 @@ drop policy if exists "daily_activity: public read" on public.daily_activity;
 create policy "daily_activity: public read" on public.daily_activity
   for select to anon, authenticated using (true);
 
+-- manual_contributions
+drop policy if exists "manual_contributions: public read" on public.manual_contributions;
+create policy "manual_contributions: public read" on public.manual_contributions
+  for select to anon, authenticated using (true);
+
+drop policy if exists "manual_contributions: admin insert" on public.manual_contributions;
+create policy "manual_contributions: admin insert" on public.manual_contributions
+  for insert to authenticated with check (public.is_admin());
+
+drop policy if exists "manual_contributions: admin update" on public.manual_contributions;
+create policy "manual_contributions: admin update" on public.manual_contributions
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "manual_contributions: admin delete" on public.manual_contributions;
+create policy "manual_contributions: admin delete" on public.manual_contributions
+  for delete to authenticated using (public.is_admin());
+
 -- ---------------------------------------------------------------------
 -- One-time cleanup: remove commits from before the tracking start date
 -- (e.g. from an earlier backfill). Their points disappear with them via
 -- the delete trigger. Safe to re-run; does nothing once clean.
 -- ---------------------------------------------------------------------
 delete from public.commits where commit_date < public.rkc_tracking_start();
+delete from public.manual_contributions where activity_date < public.rkc_tracking_start();

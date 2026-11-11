@@ -58,6 +58,23 @@ export const loadActivity = () =>
     .select('student_id, activity_date, commit_count, points')
     .order('activity_date').order('student_id'));
 
+/** Which contributors have verified private-repo work on which days (public columns only). */
+export async function loadAllPrivateDays() {
+  const { data, error } = await supabase.from('manual_contributions').select('student_id, activity_date');
+  if (error) return []; // older schema without the table
+  return data;
+}
+
+/** Verified private-repository work for one contributor (public columns only: no repo link or note). */
+export async function loadPrivateContributions(studentId) {
+  const { data, error } = await supabase.from('manual_contributions')
+    .select('id, activity_date, commit_count')
+    .eq('student_id', studentId)
+    .order('activity_date', { ascending: false });
+  if (error) return []; // older schema without the table: just show nothing
+  return data;
+}
+
 export async function loadRecentCommits(studentId, limit = 15) {
   const { data, error } = await supabase.from('commits')
     .select('sha, repo_full_name, message, html_url, committed_at, commit_date')

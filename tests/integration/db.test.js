@@ -189,3 +189,73 @@ test('live GitHub sync stores real commits once and awards 10 points per active 
     await service.from('students').delete().eq('id', s.id);
   }
 });
+
+// ---------- private-repo contributions verified by an admin ----------
+test('private repo contributions: visibility, permissions and validation', async (t) => {
+  if (!enoughHistory()) return t.skip(`tracking start ${S} is too recent for this test`);
+  const s = await addStudent('-priv');
+  const entry = { student_id: s.id, activity_date: addDays(S, 1), commit_count: 3, repo_url: 'https://github.com/Rkc-Test/Secret-App.git/', note: 'checked 3 commits' };
+
+  // only admins may add entries
+  assert.ok((await anon.from('manual_contributions').insert(entry)).error);
+  assert.ok((await user.from('manual_contributions').insert(entry)).error);
+  assert.equal((await admin.from('manual_contributions').insert(entry)).error, null);
+
+  // the link is normalised, and the same repo + day can't be added twice (any spelling)
+  const dup = await admin.from('manual_contributions').insert({ ...entry, repo_url: 'https://github.com/rkc-test/secret-app' });
+  assert.equal(dup.error?.code, '23505');
+
+  // dates must be within the tracking period, links must be GitHub repo URLs
+  assert.equal((await admin.from('manual_contributions').insert({ ...entry, activity_date: addDays(S, -1) })).error?.code, '23514');
+  assert.equal((await admin.from('manual_contributions').insert({ ...entry, activity_date: '2099-01-01' })).error?.code, '23514');
+  assert.equal((await admin.from('manual_contributions').insert({ ...entry, repo_url: 'https://evil.example/x' })).error?.code, '23514');
+
+  // visitors see that private work exists, but not which repository or the note
+  const pub = await anon.from('manual_contributions').select('id, student_id, activity_date, commit_count').eq('student_id', s.id);
+  assert.equal(pub.error, null);
+  assert.deepEqual(pub.data.map((r) => r.commit_count), [3]);
+  assert.ok((await anon.from('manual_contributions').select('repo_url')).error, 'repo_url must be hidden from visitors');
+  assert.ok((await anon.from('manual_contributions').select('note')).error, 'note must be hidden from visitors');
+  assert.ok((await user.rpc('rkc_admin_manual_contributions')).error, 'non-admins cannot list details');
+  const details = (await admin.rpc('rkc_admin_manual_contributions')).data.filter((r) => r.student_id === s.id);
+  assert.deepEqual(details.map((r) => [r.repo_url, r.note]), [['https://github.com/rkc-test/secret-app', 'checked 3 commits']]);
+});
+
+test('private repo contributions: points per day combine with GitHub commits; deleting removes them', async (t) => {
+  if (!enoughHistory()) return t.skip(`tracking start ${S} is too recent for this test`);
+  const s = await addStudent('-priv2');
+  const day = addDays(S, 2);
+  const dayRow = async () => (await activityOf(s.id)).find((r) => r.activity_date === day);
+
+  await admin.from('manual_contributions').insert({ student_id: s.id, activity_date: day, commit_count: 4, repo_url: 'https://github.com/a/private-one' });
+  assert.deepEqual([(await dayRow()).commit_count, (await dayRow()).points], [4, 10]);
+
+  // a public GitHub commit the same day: more commits, still 10 points
+  await admin.from('commits').insert(commit(s, 900, at(2, '06:00:00')));
+  assert.deepEqual([(await dayRow()).commit_count, (await dayRow()).points], [5, 10]);
+
+  // a second private repo the same day: still 10 points
+  await admin.from('manual_contributions').insert({ student_id: s.id, activity_date: day, commit_count: 2, repo_url: 'https://github.com/a/private-two' });
+  assert.deepEqual([(await dayRow()).commit_count, (await dayRow()).points], [7, 10]);
+
+  // rebuild gives the same totals
+  assert.equal((await admin.rpc('rkc_rebuild_daily_activity')).error, null);
+  assert.deepEqual([(await dayRow()).commit_count, (await dayRow()).points], [7, 10]);
+
+  // removing the private entries leaves only the GitHub commit
+  const ids = (await admin.rpc('rkc_admin_manual_contributions')).data.filter((r) => r.student_id === s.id).map((r) => r.id);
+  assert.equal((await admin.from('manual_contributions').delete().in('id', ids)).error, null);
+  assert.deepEqual([(await dayRow()).commit_count, (await dayRow()).points], [1, 10]);
+
+  // a day with only private work disappears entirely when its entry is removed
+  await admin.from('manual_contributions').insert({ student_id: s.id, activity_date: addDays(S, 1), commit_count: 1, repo_url: 'https://github.com/a/private-one' });
+  assert.ok((await activityOf(s.id)).some((r) => r.activity_date === addDays(S, 1)));
+  const [only] = (await admin.rpc('rkc_admin_manual_contributions')).data.filter((r) => r.student_id === s.id);
+  await admin.from('manual_contributions').delete().eq('id', only.id);
+  assert.ok(!(await activityOf(s.id)).some((r) => r.activity_date === addDays(S, 1)));
+
+  // deleting the contributor removes everything without errors
+  await admin.from('manual_contributions').insert({ student_id: s.id, activity_date: day, commit_count: 1, repo_url: 'https://github.com/a/private-three' });
+  assert.equal((await admin.from('students').delete().eq('id', s.id)).error, null);
+  assert.equal((await activityOf(s.id)).length, 0);
+});

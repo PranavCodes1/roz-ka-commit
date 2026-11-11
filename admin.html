@@ -135,6 +135,47 @@
             </div>
             <div class="card-body p-0" id="studentTable"></div>
           </div>
+
+          <div class="card mt-4">
+            <div class="card-header section-head">
+              <h2 class="section-title">Private repository contributions</h2>
+              <span class="section-meta">Verified by an admin</span>
+            </div>
+            <div class="card-body">
+              <p class="small text-body-secondary mb-3">
+                For work in a <strong>private</strong> repository: the contributor shares the repo with you on GitHub
+                (repo → Settings → Collaborators → add your GitHub account). Check their commits there, then record them here.
+                Each entry counts for that day like public commits (10 points per active day). The dashboard only says
+                <em>“private repository”</em>: the link and note are visible to admins only.
+              </p>
+              <form id="privForm" class="row g-2 align-items-end" novalidate>
+                <div class="col-sm-6">
+                  <label class="form-label" for="privStudent">Contributor</label>
+                  <select class="form-select" id="privStudent" required></select>
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="privDate">Date of the commits</label>
+                  <input class="form-control" id="privDate" type="date" required>
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="privRepo">Private repository link</label>
+                  <input class="form-control font-monospace" id="privRepo" required placeholder="https://github.com/owner/repo" autocapitalize="off" spellcheck="false">
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label" for="privCount">Commits that day</label>
+                  <input class="form-control" id="privCount" type="number" min="1" max="100" value="1" required>
+                </div>
+                <div class="col-sm-8">
+                  <label class="form-label" for="privNote">Note <span class="text-body-secondary">(optional, admins only)</span></label>
+                  <input class="form-control" id="privNote" maxlength="300" placeholder="e.g. checked commits a1b2c3d…f4e5d6c">
+                </div>
+                <div class="col-12"><div id="privMsg"></div>
+                  <button class="btn btn-primary" type="submit" id="privAdd"><i class="bi bi-shield-check me-1"></i>Add verified contribution</button>
+                </div>
+              </form>
+            </div>
+            <div class="card-body p-0 border-top" id="privTable"></div>
+          </div>
         </div>
       </div>
     </section>

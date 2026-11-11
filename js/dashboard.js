@@ -1,11 +1,11 @@
 // Public dashboard + leaderboard. Read-only: works for any visitor.
 import { CONFIG } from './config.js';
-import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart } from './db.js';
+import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, mostConsistent, todaySummary, periodSeries, calendarValues, computeStreaks, FILTERS } from './stats.js';
+import { buildLeaderboard, mostConsistent, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
-const state = { students: [], activity: [], filter: 'all', unit: 'week', chart: null, loaded: false };
+const state = { students: [], activity: [], privateRows: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
 const CONSISTENT_MIN_DAYS = 3;
 
@@ -19,7 +19,8 @@ async function load() {
   }
   $('#pageAlert').innerHTML = '';
   try {
-    const [students, activity, start] = await Promise.all([loadStudents(), loadActivity(), loadTrackingStart()]);
+    const [students, activity, start, privateRows] = await Promise.all([loadStudents(), loadActivity(), loadTrackingStart(), loadAllPrivateDays()]);
+    state.privateRows = privateRows;
     const startText = start ? formatDay(start) : '—';
     $('#startChip').textContent = startText;
     $('#startFoot').textContent = startText;
@@ -61,6 +62,10 @@ function renderLeaderboard(t) {
     return;
   }
   const rows = buildLeaderboard(state.students, state.activity, state.filter, t);
+  const [pFrom, pTo] = periodRange(state.filter, t);
+  const hasPrivate = new Set(state.privateRows
+    .filter((p) => (pFrom === null || p.activity_date >= pFrom) && p.activity_date <= pTo)
+    .map((p) => p.student_id));
   const top = mostConsistent(buildLeaderboard(state.students, state.activity, 'all', t));
   // "Consistent" label for the contributor(s) with the most active days in the last
   // 30 (ties included) — only once that is at least CONSISTENT_MIN_DAYS, so a single
@@ -78,6 +83,7 @@ function renderLeaderboard(t) {
           ${avatar(r.student)}
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
+              ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
               ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Most active days in the last 30 (${best})">Consistent</span>` : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
@@ -232,9 +238,24 @@ async function openStudent(id) {
       level: (v) => (v === 0 ? 0 : v === 1 ? 1 : v <= 3 ? 2 : v <= 6 ? 3 : 4),
       label: (v) => `${v} commit${v === 1 ? '' : 's'}`,
     })}</div>
+    <div id="privateWork"></div>
     <h3 class="subhead">Recent commits</h3>
     <div id="recentCommits">${loadingHtml()}</div>`;
   bootstrap.Modal.getOrCreateInstance($('#studentModal')).show();
+
+  loadPrivateContributions(id).then((items) => {
+    if (!items.length) return;
+    const total = items.reduce((a, r) => a + r.commit_count, 0);
+    $('#privateWork').innerHTML = `
+      <h3 class="subhead">Private repository contributions <span class="text-body-secondary fw-normal">· ${total} commit${total === 1 ? '' : 's'}</span></h3>
+      <ul class="list-group list-group-flush small mb-3">${items.map((r) => `
+        <li class="list-group-item px-0 d-flex gap-2 align-items-center">
+          <i class="bi bi-lock text-body-secondary"></i>
+          <div class="flex-grow-1">${r.commit_count} commit${r.commit_count === 1 ? '' : 's'} in a private repository</div>
+          <span class="tag-consistent" title="An admin checked these commits in the private repository">verified by admin</span>
+          <span class="text-body-secondary text-nowrap">${esc(formatDay(r.activity_date))}</span>
+        </li>`).join('')}</ul>`;
+  });
 
   try {
     const list = await loadRecentCommits(id);

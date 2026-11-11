@@ -2,7 +2,7 @@
 // Every write is checked again by Supabase Row Level Security; hiding the UI is not the security boundary.
 import { CONFIG } from './config.js';
 import { supabase, configError, loadStudents, loadActivity, loadTrackingStart, syncStore } from './db.js';
-import { formatDay } from './dates.js';
+import { formatDay, todayIn } from './dates.js';
 import { GitHubClient, normalizeToken } from './github.js';
 import { syncStudent, syncAll } from './sync.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg } from './ui.js';
@@ -76,7 +76,11 @@ async function route(session) {
   if (!start) {
     $('#pageAlert').innerHTML = errorHtml('The database is missing rkc_tracking_start(). Re-run supabase/schema.sql in the Supabase SQL Editor, otherwise commits from before the start date would be counted.');
   }
+  if (start) $('#privDate').min = start;
+  $('#privDate').max = todayIn(CONFIG.TIMEZONE);
+  if (!$('#privDate').value) $('#privDate').value = todayIn(CONFIG.TIMEZONE);
   await refreshStudents();
+  await loadPrivate();
 }
 
 $('#loginForm').addEventListener('submit', async (e) => {
@@ -106,6 +110,7 @@ async function refreshStudents() {
       state.totals.set(r.student_id, t);
     }
     renderStudents();
+    fillPrivateSelect();
   } catch (err) {
     $('#studentTable').innerHTML = `<div class="p-3">${errorHtml('Could not load contributors: ' + errMsg(err))}</div>`;
   }
@@ -255,7 +260,90 @@ $('#deleteConfirm').addEventListener('click', async () => {
   if (error) { $('#deleteMsg').innerHTML = msg('danger', errMsg(error)); return; }
   deleteModal().hide();
   deleting = null;
-  await refreshStudents();
+  await Promise.all([refreshStudents(), loadPrivate()]);
+});
+
+// ---------- private repository contributions (verified by an admin) ----------
+const REPO_RE = /^https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)/i;
+
+/** "https://github.com/Owner/Repo.git/" or ".../Repo/commits/main" -> "https://github.com/owner/repo" */
+function normalizeRepoUrl(url) {
+  const m = url.trim().match(REPO_RE);
+  if (!m) return null;
+  return `https://github.com/${m[1]}/${m[2].replace(/\.git$/i, '')}`.toLowerCase();
+}
+
+function fillPrivateSelect() {
+  const sel = $('#privStudent');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Choose…</option>' + state.students
+    .map((s) => `<option value="${s.id}">${esc(s.name)} (@${esc(s.github_username)})</option>`).join('');
+  if (state.students.some((s) => String(s.id) === current)) sel.value = current;
+}
+
+async function loadPrivate() {
+  const el = $('#privTable');
+  el.innerHTML = loadingHtml();
+  const { data, error } = await supabase.rpc('rkc_admin_manual_contributions');
+  if (error) {
+    el.innerHTML = `<div class="p-3">${errorHtml(/rkc_admin_manual_contributions|PGRST202|404/.test(error.message + error.code)
+      ? 'Re-run supabase/schema.sql in the Supabase SQL Editor to enable private repository contributions.'
+      : 'Could not load private contributions: ' + errMsg(error))}</div>`;
+    return;
+  }
+  if (!data.length) { el.innerHTML = emptyHtml('No private repository contributions recorded yet.', 'bi-lock'); return; }
+  const name = (id) => state.students.find((s) => s.id === id)?.name || `#${id}`;
+  el.innerHTML = `<div class="table-responsive"><table class="table align-middle mb-0">
+    <thead><tr><th>Date</th><th>Contributor</th><th>Repository</th><th class="text-end">Commits</th><th></th></tr></thead>
+    <tbody>${data.map((r) => `<tr>
+      <td class="text-nowrap">${esc(formatDay(r.activity_date))}</td>
+      <td>${esc(name(r.student_id))}</td>
+      <td class="min-w-0"><a class="handle" href="${esc(r.repo_url)}" target="_blank" rel="noopener"><i class="bi bi-lock me-1"></i>${esc(r.repo_url.replace('https://github.com/', ''))}</a>
+        ${r.note ? `<div class="small text-body-secondary text-truncate">${esc(r.note)}</div>` : ''}</td>
+      <td class="text-end num">${r.commit_count}</td>
+      <td class="text-end"><button class="btn btn-sm btn-outline-danger" data-priv-del="${r.id}" title="Remove this entry"><i class="bi bi-trash"></i></button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+$('#privForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const out = $('#privMsg');
+  const studentId = Number($('#privStudent').value);
+  const repo = normalizeRepoUrl($('#privRepo').value);
+  const date = $('#privDate').value;
+  const count = Number($('#privCount').value);
+  if (!studentId) { out.innerHTML = msg('danger', 'Choose a contributor.'); return; }
+  if (!repo) { out.innerHTML = msg('danger', 'Use a GitHub repository link like https://github.com/owner/repo.'); return; }
+  if (!date) { out.innerHTML = msg('danger', 'Choose the date of the commits.'); return; }
+  if (!Number.isInteger(count) || count < 1 || count > 100) { out.innerHTML = msg('danger', 'Commits must be a whole number from 1 to 100.'); return; }
+  $('#privAdd').disabled = true;
+  const { error } = await supabase.from('manual_contributions').insert({
+    student_id: studentId, activity_date: date, commit_count: count, repo_url: repo, note: $('#privNote').value.trim() || null,
+  });
+  $('#privAdd').disabled = false;
+  if (error) {
+    out.innerHTML = msg('danger', error.code === '23505'
+      ? 'This contributor already has an entry for this repository on that day. Remove it first if you want to change it.'
+      : error.code === '23514' && /date/i.test(error.message) ? error.message : errMsg(error));
+    return;
+  }
+  const who = state.students.find((s) => s.id === studentId)?.name || 'Contributor';
+  out.innerHTML = msg('success', `Added: ${who}, ${count} commit${count === 1 ? '' : 's'} on ${formatDay(date)} in a private repository.`);
+  $('#privRepo').value = '';
+  $('#privNote').value = '';
+  $('#privCount').value = '1';
+  await Promise.all([refreshStudents(), loadPrivate()]);
+});
+
+$('#privTable').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-priv-del]');
+  if (!b) return;
+  if (!window.confirm('Remove this private repository contribution? Its commits (and the day\'s points, if nothing else counts that day) are removed.')) return;
+  b.disabled = true;
+  const { error } = await supabase.from('manual_contributions').delete().eq('id', Number(b.dataset.privDel));
+  if (error) { b.disabled = false; $('#privMsg').innerHTML = msg('danger', errMsg(error)); return; }
+  $('#privMsg').innerHTML = '';
+  await Promise.all([refreshStudents(), loadPrivate()]);
 });
 
 // ---------- sync ----------
