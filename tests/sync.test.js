@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GitHubClient } from '../js/github.js';
+import { GitHubClient, normalizeToken } from '../js/github.js';
 import { toCommitRows, syncWindow, syncStudent, syncAll } from '../js/sync.js';
 
 const NOW = new Date('2026-11-09T06:00:00Z');
@@ -237,4 +237,34 @@ test('toCommitRows: an unlinked commit only counts when it comes from their own 
   const unlinkedFromSearch = { ...item(1, '2026-11-08T05:00:00Z', null) };
   const unlinkedOwn = { ...item(2, '2026-11-08T05:00:00Z', null), ownRepo: true };
   assert.deepEqual(toCommitRows([unlinkedFromSearch, unlinkedOwn], student, NOW).map((r) => r.sha), [sha(2)]);
+});
+
+
+// ---------- optional GitHub token ----------
+test('normalizeToken strips Bearer/token prefixes, quotes and whitespace', () => {
+  assert.equal(normalizeToken('  Bearer github_pat_abc \n'), 'github_pat_abc');
+  assert.equal(normalizeToken('token ghp_x'), 'ghp_x');
+  assert.equal(normalizeToken('"github_pat_q"'), 'github_pat_q');
+  assert.equal(normalizeToken(''), '');
+});
+
+test('a rejected token is dropped and the request is retried without it', async () => {
+  const seen = [];
+  let rejected = 0;
+  const fetch = async (url, { headers }) => {
+    seen.push(headers.Authorization || 'none');
+    return seen.length === 1 ? response(401, { message: 'Bad credentials' }) : response(200, { login: 'asha' });
+  };
+  const gh = new GitHubClient({ token: 'Bearer my-admin-password', fetch, onTokenRejected: () => rejected++ });
+  assert.equal((await gh.getUser('asha')).login, 'asha');
+  assert.deepEqual(seen, ['Bearer my-admin-password', 'none']); // "Bearer " typed by the user isn't doubled
+  assert.equal(rejected, 1);
+  assert.equal(gh.token, '');
+  await gh.getUser('asha'); // later requests go without the token
+  assert.equal(seen.at(-1), 'none');
+});
+
+test('401 without a token is reported, not retried forever', async () => {
+  const gh = new GitHubClient({ fetch: fakeFetch([response(401, { message: 'Requires authentication' })]) });
+  await assert.rejects(gh.getUser('asha'), (e) => e.status === 401);
 });

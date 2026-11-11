@@ -287,6 +287,9 @@ body {
 
 .chart-wrap { position: relative; height: 300px; }
 
+/* token field: hidden like a password, but not a password field, so password managers don't autofill it */
+.masked { -webkit-text-security: disc; text-security: disc; }
+
 /* ---------- admin sync log ---------- */
 .sync-log:not(:empty) {
   background: var(--app-subtle); border: 1px solid var(--app-border); border-radius: 8px;

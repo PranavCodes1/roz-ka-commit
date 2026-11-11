@@ -3,7 +3,7 @@
 import { CONFIG } from './config.js';
 import { supabase, configError, loadStudents, loadActivity, loadTrackingStart, syncStore } from './db.js';
 import { formatDay } from './dates.js';
-import { GitHubClient } from './github.js';
+import { GitHubClient, normalizeToken } from './github.js';
 import { syncStudent, syncAll } from './sync.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg } from './ui.js';
 
@@ -19,7 +19,8 @@ function readToken() {
   try { return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
 }
 function saveToken() {
-  const token = $('#ghToken').value.trim();
+  const token = normalizeToken($('#ghToken').value);
+  $('#ghToken').value = token;
   try {
     sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
@@ -27,8 +28,24 @@ function saveToken() {
   } catch { /* storage unavailable: token lives only in the input */ }
   return token;
 }
+function forgetToken() {
+  $('#ghToken').value = '';
+  try { sessionStorage.removeItem(TOKEN_KEY); localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+}
+let tokenWarned = false;
 function github(onWait) {
-  return new GitHubClient({ token: saveToken(), onWait });
+  tokenWarned = false;
+  return new GitHubClient({
+    token: saveToken(),
+    onWait,
+    // An invalid optional token must never block a sync: drop it and carry on without it.
+    onTokenRejected: () => {
+      forgetToken();
+      if (tokenWarned) return;
+      tokenWarned = true;
+      $('#tokenNote').innerHTML = msg('warning', 'GitHub rejected the token in this field (invalid, expired, or a password your browser filled in). It has been removed; syncing continues without a token. Paste a valid token (github_pat_…) only if you need faster manual refreshes.');
+    },
+  });
 }
 
 // ---------- auth ----------

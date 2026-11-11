@@ -106,7 +106,8 @@
               </p>
               <div class="mb-3">
                 <label class="form-label small" for="ghToken">GitHub token <span class="text-body-secondary">(optional, raises search limit from 10 to 30 req/min)</span></label>
-                <input class="form-control form-control-sm font-monospace" id="ghToken" type="password" autocomplete="off" placeholder="github_pat_… (no scopes needed)">
+                <input class="form-control form-control-sm font-monospace masked" id="ghToken" name="rkc-gh-token" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore placeholder="github_pat_… (optional, no permissions needed)">
+                <div id="tokenNote" class="mt-2"></div>
                 <div class="form-check mt-1">
                   <input class="form-check-input" type="checkbox" id="rememberToken">
                   <label class="form-check-label small" for="rememberToken">Remember on this device (stored only in this browser)</label>

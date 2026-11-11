@@ -24,8 +24,9 @@ export class GitHubClient {
    * @param {number} [opts.maxWaitMs]  longest we will wait for a rate-limit reset before giving up
    * @param {Function} [opts.onWait]   called with (ms, reason) before sleeping
    */
-  constructor({ token = '', fetch: fetchImpl, sleep = defaultSleep, now = () => Date.now(), maxWaitMs = 90_000, onWait = () => {} } = {}) {
-    this.token = token.trim();
+  constructor({ token = '', fetch: fetchImpl, sleep = defaultSleep, now = () => Date.now(), maxWaitMs = 90_000, onWait = () => {}, onTokenRejected = () => {} } = {}) {
+    this.token = normalizeToken(token);
+    this.onTokenRejected = onTokenRejected;
     this.fetch = fetchImpl || globalThis.fetch.bind(globalThis);
     this.sleep = sleep;
     this.now = now;
@@ -35,10 +36,9 @@ export class GitHubClient {
   }
 
   async request(path, resource = 'core') {
-    const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
-    if (this.token) headers.Authorization = `Bearer ${this.token}`;
-
     for (let attempt = 0; attempt < 4; attempt++) {
+      const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
       // Pre-emptively wait if we already know this bucket is empty.
       const known = this.limits[resource];
       if (known && known.remaining === 0) {
@@ -80,7 +80,14 @@ export class GitHubClient {
         await this.sleep(1000 * 2 ** attempt);
         continue;
       }
-      if (res.status === 401) throw new GitHubError('GitHub token is invalid or expired.', { status: 401 });
+      if (res.status === 401 && this.token) {
+        // The token is optional: if GitHub rejects it, carry on without one.
+        this.token = '';
+        this.onTokenRejected();
+        attempt--; // this retry doesn't count
+        continue;
+      }
+      if (res.status === 401) throw new GitHubError(`GitHub API error 401: ${message}`, { status: 401 });
       throw new GitHubError(`GitHub API error ${res.status}: ${message}`, { status: res.status });
     }
     throw new GitHubError('GitHub request failed after retries.');
@@ -190,6 +197,11 @@ export class GitHubClient {
       { status: 403, code: 'rate_limited' },
     );
   }
+}
+
+/** Accept a token pasted with "Bearer "/"token " in front, quotes or whitespace. */
+export function normalizeToken(token) {
+  return String(token || '').trim().replace(/^["']|["']$/g, '').trim().replace(/^(bearer|token)\s+/i, '').trim();
 }
 
 const dayMs = (d) => Date.parse(d + 'T00:00:00Z');
