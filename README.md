@@ -31,8 +31,12 @@ Commits from before that date are never stored, so they give no points, streaks 
 | No commits that day | 0 |
 | Maximum per contributor per day | **10** |
 
-- A **qualifying commit** is a real, non-merge commit, authored by the contributor's GitHub account, in a public repository,
-  found by GitHub's commit search.
+- A **qualifying commit** is a real, non-merge commit on a public repository's default branch that is either
+  - **linked to the contributor's GitHub account** (any public repository), or
+  - in a public repository the contributor **owns** (not a fork), even if its email isn't linked to any GitHub account
+    ("author: None"). Only the owner, or people they invite, can push there.
+
+  A commit linked to a **different** GitHub account never counts, even inside the contributor's own repository.
 - **Days** are counted in **India time** (`Asia/Kolkata`) using the commit's author date: a commit at 00:30 IST counts for
   that day, one at 23:30 IST for the day before.
 - **Where it's enforced:** points are calculated **in the database** by triggers, not in the browser. A `CHECK` constraint makes
@@ -134,16 +138,20 @@ To try it locally instead: `python3 -m http.server 8080` and open http://localho
 
 ## How the sync works
 
-- **Source:** the GitHub **commit search API**,
-  `GET /search/commits?q=author:<user> author-date:<from>..<to> merge:false`. It returns real commits with SHA, author date,
-  repository and message; nothing is generated or estimated.
+- **Sources** (both real commits from GitHub; nothing is generated or estimated):
+  1. the **commit search API**, `GET /search/commits?q=author:<user> author-date:<from>..<to> merge:false`: commits linked
+     to the account in any public repository;
+  2. the contributor's **own repositories**: `GET /users/<user>/repos` (public, non-fork, pushed during the window), then
+     `GET /repos/<user>/<repo>/commits` on the default branch. This also finds commits whose email isn't linked to GitHub.
 - **Window:**
   - It never looks before the start date.
   - A first sync covers up to `BACKFILL_DAYS` (default 90).
   - Later syncs re-check `SYNC_OVERLAP_DAYS` (default 14) before the previous sync, so commits authored earlier but
     pushed later are still found, and nothing between two syncs is skipped.
-- **Filtering:** results are limited to commits whose GitHub author is that contributor. They are de-duplicated by SHA (the
-  same commit in a fork counts once) and inserted with `ON CONFLICT DO NOTHING`; triggers then update `daily_activity`.
+- **Filtering:** commits linked to the contributor count from both sources; unlinked commits count only from their own
+  repositories; commits linked to anyone else are dropped. Results are de-duplicated by SHA (a commit found by both
+  sources, or also present in a fork, counts once) and inserted with `ON CONFLICT DO NOTHING`; triggers then update
+  `daily_activity`.
 - **Safeguards:**
   - Commits dated in the future (people really push "2099" commits) are rejected, in the code and again in the database.
   - A deleted or renamed GitHub account is reported as "user not found", not silently ignored.
@@ -230,10 +238,10 @@ Supabase pauses free projects after 7 days without activity; the hourly sync kee
 | Limit | Effect in RKC |
 |---|---|
 | Search API: **10 requests/min** without a token, **30/min** with one | Each contributor needs ≥ 1 request per sync. RKC reads the `X-RateLimit-*` headers and **waits automatically**. The hourly sync uses the Actions token. On the admin page you can paste a GitHub token (fine-grained, **no permissions needed**, kept only in your browser) to make manual refreshes faster. |
-| Core API: 60 requests/hour without a token | Only used to verify usernames when adding/editing contributors. |
+| Core API: 60 requests/hour without a token, 1,000+/hour with one | Used to verify usernames and to read contributors' own repositories (about 1 request per contributor + 1 per recently pushed repo per sync). The hourly sync uses the Actions token. For manual **Refresh all** with many contributors, paste a GitHub token on the admin page. |
 | Secondary rate limits / `Retry-After` | Honoured automatically; temporary 5xx and network errors are retried. |
 | Only **public repositories** and the **default branch** are searchable | Feature-branch commits count once merged (by their original author date). Private-repo commits are invisible to RKC. |
-| Commits must be **linked to the GitHub account** | The commit email must be one of the contributor's verified GitHub emails, like the GitHub contribution graph. |
+| Commits outside their own repositories must be **linked to the GitHub account** | In someone else's repository, the commit email must be one of the contributor's verified GitHub emails (as for the GitHub contribution graph). In their own repositories this isn't needed. |
 | Commits that exist only in forks may not be indexed | Ask contributors to commit to their own repositories. |
 | Search indexing is not instant | New pushes can take a few minutes to appear; later syncs re-check the last 14 days. |
 | Git author dates can be set to anything | Future dates are rejected. Back-dated commits can't be detected by any public API and count on the date they claim (but never before the start date). |

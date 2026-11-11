@@ -140,7 +140,10 @@ test('syncStudent stores rows via the store and marks the student synced', async
     insertCommits: async (rows) => { stored.push(...rows); return rows.length; },
     markSynced: async (id, at) => stored.push({ synced: id, at }),
   };
-  const fetch = fakeFetch([response(200, { total_count: 2, items: [item(1, '2026-11-08T00:00:00Z'), item(1, '2026-11-08T00:00:00Z', 'asha', 'x/fork')] })]);
+  const fetch = fakeFetch([
+    response(200, { total_count: 2, items: [item(1, '2026-11-08T00:00:00Z'), item(1, '2026-11-08T00:00:00Z', 'asha', 'x/fork')] }),
+    response(200, []), // their own repos: none pushed recently
+  ]);
   const r = await syncStudent(student, { github: new GitHubClient({ fetch }), store, timeZone: 'Asia/Kolkata', now: NOW });
   assert.deepEqual([r.fetched, r.unique, r.inserted], [2, 1, 1]);
   assert.deepEqual(stored.at(-1), { synced: 7, at: NOW.toISOString() });
@@ -151,6 +154,7 @@ test('syncAll continues after a per-student error but stops on rate limit', asyn
   const fetch = fakeFetch([
     response(422, { message: 'Validation Failed' }), // student 1: unknown user
     response(200, { total_count: 0, items: [] }), // student 2: ok
+    response(200, []), // student 2: own repos
     response(403, { message: 'API rate limit exceeded' }, { 'x-ratelimit-remaining': 0, 'x-ratelimit-reset': 99999999 }), // student 3
   ]);
   const gh = new GitHubClient({ fetch, now: () => 0, sleep: async () => {} });
@@ -179,8 +183,58 @@ test('tracking start: commits from before the start date are not stored', async 
     item(1, '2026-11-08T18:00:00Z'), // 23:30 Nov 8 IST: before start
     item(2, '2026-11-08T19:00:00Z'), // 00:30 Nov 9 IST: counts
     item(3, '2026-11-09T05:00:00Z'), // Nov 9 IST: counts
-  ] })]);
+  ] }), response(200, [])]);
   const r = await syncStudent(student, { github: new GitHubClient({ fetch }), store, timeZone: 'Asia/Kolkata', trackingStart: '2026-11-09', now: NOW });
   assert.deepEqual(stored.map((x) => x.sha), [sha(2), sha(3)]);
   assert.deepEqual([r.fetched, r.unique, r.inserted], [3, 2, 2]);
+});
+
+
+// ---------- commits in the contributor's own repositories ----------
+const repoCommit = (n, date, login, parents = 1) => ({
+  sha: sha(n), html_url: `https://github.com/x/c/${n}`,
+  commit: { author: { date }, message: `own ${n}` },
+  author: login ? { login } : null, parents: Array.from({ length: parents }, () => ({})),
+});
+const repo = (name, pushed, extra = {}) => ({ full_name: `Asha/${name}`, pushed_at: pushed, fork: false, private: false, ...extra });
+
+test('own repos: lists recent, non-fork repos and skips merges, empty repos and old repos', async () => {
+  const fetch = fakeFetch([
+    response(200, [
+      repo('app', '2026-11-08T10:00:00Z'),
+      repo('forked', '2026-11-08T09:00:00Z', { fork: true }),
+      repo('empty', '2026-11-08T08:00:00Z'),
+      repo('old', '2026-10-01T00:00:00Z'), // not pushed in the window: not fetched
+    ]),
+    response(200, [repoCommit(1, '2026-11-08T05:00:00Z', null), repoCommit(2, '2026-11-08T06:00:00Z', 'asha', 2)]),
+    response(409, { message: 'Git Repository is empty.' }),
+  ]);
+  const items = await new GitHubClient({ fetch, sleep: async () => {} }).listOwnRepoCommits('Asha', '2026-11-07', '2026-11-10');
+  assert.deepEqual(items.map((i) => [i.sha, i.repository.full_name, i.ownRepo]), [[sha(1), 'Asha/app', true]]);
+  assert.match(fetch.calls[0], /\/users\/Asha\/repos\?type=owner&sort=pushed/);
+  assert.match(fetch.calls[1], /\/repos\/Asha\/app\/commits\?since=2026-11-07T00:00:00Z&until=2026-11-10T23:59:59Z/);
+  assert.equal(fetch.calls.length, 3); // the fork and the old repo were never requested
+});
+
+test('own repos: unlinked commits count, commits linked to someone else do not', async () => {
+  const stored = [];
+  const store = { insertCommits: async (rows) => { stored.push(...rows); return rows.length; }, markSynced: async () => {} };
+  const fetch = fakeFetch([
+    response(200, { total_count: 1, items: [item(1, '2026-11-09T05:00:00Z')] }), // search: linked commit
+    response(200, [repo('tracker', '2026-11-09T06:00:00Z')]),
+    response(200, [
+      repoCommit(1, '2026-11-09T05:00:00Z', 'asha'), // same commit as search: stored once
+      repoCommit(2, '2026-11-09T06:00:00Z', null), // email not linked to any account: counts
+      repoCommit(3, '2026-11-09T07:00:00Z', 'mallory'), // a collaborator's commit: never counts
+    ]),
+  ]);
+  const r = await syncStudent(student, { github: new GitHubClient({ fetch }), store, timeZone: 'Asia/Kolkata', trackingStart: '2026-11-09', now: NOW });
+  assert.deepEqual(stored.map((x) => [x.sha, x.repo_full_name]), [[sha(1), 'asha/app'], [sha(2), 'Asha/tracker']]);
+  assert.equal(r.unique, 2);
+});
+
+test('toCommitRows: an unlinked commit only counts when it comes from their own repo', () => {
+  const unlinkedFromSearch = { ...item(1, '2026-11-08T05:00:00Z', null) };
+  const unlinkedOwn = { ...item(2, '2026-11-08T05:00:00Z', null), ownRepo: true };
+  assert.deepEqual(toCommitRows([unlinkedFromSearch, unlinkedOwn], student, NOW).map((r) => r.sha), [sha(2)]);
 });

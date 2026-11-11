@@ -7,7 +7,13 @@
 // }
 import { addDays, dateInZone, todayIn } from './dates.js';
 
-/** Convert GitHub search items into `commits` rows for one student. */
+/**
+ * Convert GitHub commit items into `commits` rows for one contributor. A commit counts if
+ *  - GitHub links it to this contributor's account (search results and own repos), or
+ *  - it is in a repository the contributor owns (`ownRepo`) and its email isn't linked
+ *    to ANY GitHub account (author: null) — only the owner (or people they invite) can
+ *    push there. Commits linked to a different account never count.
+ */
 export function toCommitRows(items, student, now = new Date()) {
   const login = student.github_username.toLowerCase();
   const latest = now.getTime() + 60 * 60 * 1000; // ignore commits dated in the future
@@ -15,7 +21,9 @@ export function toCommitRows(items, student, now = new Date()) {
   const rows = [];
   for (const item of items) {
     if (!item?.sha || !item.commit?.author?.date) continue;
-    if ((item.author?.login || '').toLowerCase() !== login) continue; // must be linked to this account
+    const linkedTo = (item.author?.login || '').toLowerCase();
+    const unlinkedInOwnRepo = item.ownRepo === true && !item.author;
+    if (linkedTo !== login && !unlinkedInOwnRepo) continue;
     if (seen.has(item.sha)) continue; // same commit in a fork
     const committedAt = new Date(item.commit.author.date);
     if (Number.isNaN(committedAt.getTime()) || committedAt.getTime() > latest) continue;
@@ -54,7 +62,12 @@ export function syncWindow(student, { timeZone, backfillDays, overlapDays, track
 
 export async function syncStudent(student, { github, store, timeZone, backfillDays = 90, overlapDays = 14, trackingStart = null, full = false, now = new Date(), onPage }) {
   const { from, to } = syncWindow(student, { timeZone, backfillDays, overlapDays, trackingStart, full, now });
-  const items = await github.searchCommits(student.github_username, from, to, onPage);
+  // 1) commits linked to the account, anywhere public; 2) commits in their own repos,
+  // including ones whose email isn't linked to GitHub. Duplicates are merged by SHA.
+  const items = [
+    ...await github.searchCommits(student.github_username, from, to, onPage),
+    ...await github.listOwnRepoCommits(student.github_username, from, to),
+  ];
   // The window is padded a day for timezone skew; drop anything before the start
   // date here too (the database enforces the same rule).
   const rows = toCommitRows(items, student, now)

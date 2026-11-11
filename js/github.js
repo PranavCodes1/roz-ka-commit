@@ -128,6 +128,44 @@ export class GitHubClient {
     return out;
   }
 
+  /**
+   * Non-merge commits on the default branch of the public, non-fork repositories
+   * that `username` owns, with commit date in [from, to] ('YYYY-MM-DD').
+   * Unlike search, this also returns commits whose email isn't linked to any GitHub
+   * account (`author: null`). Items are shaped like search results, plus `ownRepo: true`.
+   */
+  async listOwnRepoCommits(username, from, to) {
+    const since = `${from}T00:00:00Z`;
+    const until = `${to}T23:59:59Z`;
+    const out = [];
+    for (let page = 1; page <= 10; page++) {
+      const repos = await this.request(
+        `/users/${encodeURIComponent(username)}/repos?type=owner&sort=pushed&direction=desc&per_page=100&page=${page}`, 'core');
+      // Sorted by last push, so stop at the first repo not pushed since the window start.
+      const recent = repos.filter((r) => r.pushed_at && r.pushed_at >= since);
+      for (const repo of recent) {
+        if (repo.fork || repo.private) continue; // forks carry other people's history
+        for (let p = 1; p <= 10; p++) {
+          let commits;
+          try {
+            commits = await this.request(
+              `/repos/${repo.full_name}/commits?since=${since}&until=${until}&per_page=100&page=${p}`, 'core');
+          } catch (err) {
+            if (err.status === 409 || err.status === 404) break; // empty or just-deleted repo
+            throw err;
+          }
+          for (const c of commits) {
+            if ((c.parents || []).length > 1) continue; // merge commit
+            out.push({ ...c, repository: { full_name: repo.full_name }, ownRepo: true });
+          }
+          if (commits.length < 100) break;
+        }
+      }
+      if (repos.length < 100 || recent.length < repos.length) break;
+    }
+    return out;
+  }
+
   #readLimits(headers) {
     const resource = headers.get('x-ratelimit-resource');
     if (!resource) return;
