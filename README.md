@@ -14,7 +14,7 @@ It is hosted for free on **GitHub Pages**, and a **GitHub Actions** job syncs co
 
 | Part | What it does |
 |---|---|
-| Dashboard (`index.html`) | Today's numbers, leaderboard (today / week / month / all time), current and best streaks, most consistent contributors, contribution calendar, weekly/monthly chart. Click a contributor for their own calendar and recent commits. |
+| Dashboard (`index.html`) | Today's numbers, leaderboard (today / week / month / all time), current and best streaks, **Consistent** and **Comeback champ** recognition, contribution calendar, weekly/monthly chart. Click a contributor for their own calendar and recent commits. |
 | Admin (`admin.html`) | Sign in, add / edit / remove contributors, **Refresh all from GitHub** (or one contributor). |
 | Hourly sync (`.github/workflows/sync.yml`) | Fetches new commits for everyone, every hour, without anyone clicking Refresh. |
 
@@ -47,13 +47,47 @@ Commits from before that date are never stored, so they give no points, streaks 
   follows on (1, 1, 2, …). Within a tie, rows are ordered by active days, then commits, then name.
 - **Streaks:** the current streak counts consecutive days with a commit. It survives until the end of today, so a streak
   ending yesterday still counts if you haven't committed yet today. The best streak is the longest run ever.
-- **Most consistent:** the contributor(s) with the **highest points in the last 30 days**. Everyone tied on that
-  score is listed and gets the **Consistent** label (not a fixed top 3), once the leader has at least **3** active days.
-- **Comeback champ:** someone who had been active, took a break of **2 or more days** without commits, and then
-  **commits again** (one day is enough). The label stays while they keep committing (today or yesterday) and ends if
-  they miss a whole day again. Everyone on a comeback is listed as a **Comeback champ** (longest current run first)
-  and gets that label in the leaderboard. The section is only shown when
-  someone qualifies. Newcomers without earlier activity don't count. Both thresholds are set in `COMEBACK` in `js/stats.js`.
+- **Recognition:** see [Consistent and Comeback champ](#consistent-and-comeback-champ) below.
+
+## Consistent and Comeback champ
+
+Two labels highlight contributors on the dashboard. They're only there to motivate, and never affect points.
+
+### Consistent
+**Who gets it:** the contributor(s) with the **highest points in the last 30 days** (today and the 29 days before).
+
+1. RKC adds up each contributor's points for the last 30 days, which is 10 per active day.
+2. The highest total wins, and **everyone tied on that total** gets the label, however many people that is.
+3. The leader needs at least **3 active days** in that window, so nobody gets it on their first day.
+
+Where it shows: the **Most consistent** section lists everyone with the label, and the leaderboard shows a
+**Consistent** tag next to their names.
+
+*Example:* in the last 30 days Asha and Chen both have 70 points and Ravi has 50, so Asha **and** Chen are Consistent.
+
+### Comeback champ
+**Who gets it:** someone who **comes back after a break**.
+
+1. They **had been active before**: at least one day with a commit. Brand-new contributors don't count.
+2. They took a **break of 2 or more days in a row** with no commits.
+3. They **commit again**, and one day is enough. They become a **Comeback champ** that day.
+4. The label **stays while they keep committing** (today or yesterday) and **ends once they miss a whole day** again,
+   until their next comeback.
+
+Where it shows: a **Comeback champ** section listing everyone currently on a comeback (longest current run first), and
+a **Comeback champ** tag next to their names in the leaderboard. The section is **hidden when nobody qualifies**.
+
+*Examples:*
+
+| Activity | Comeback champ? |
+|---|---|
+| Commit Mon, nothing Tue–Wed, commit Thu | ✅ from Thursday |
+| Commit Mon, nothing Tue, commit Wed | ❌ only a 1-day break |
+| First ever commits on Wed and Thu | ❌ a newcomer, not a comeback |
+| Came back Thu, then nothing Fri or Sat | ❌ again from Saturday (the run ended) |
+
+Both thresholds can be changed in `COMEBACK` in `js/stats.js`: `minGap` (break length, now 2 days) and `minStreak`
+(days back in a row, now 1). For Consistent, `CONSISTENT_MIN_DAYS` (now 3) is in the same file.
 
 ## Project structure
 
