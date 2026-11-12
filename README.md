@@ -47,9 +47,12 @@ Commits from before that date are never stored, so they give no points, streaks 
   follows on (1, 1, 2, …). Within a tie, rows are ordered by active days, then commits, then name.
 - **Streaks:** the current streak counts consecutive days with a commit. It survives until the end of today, so a streak
   ending yesterday still counts if you haven't committed yet today. The best streak is the longest run ever.
-- **Most consistent:** the panel lists the 3 contributors with the most active days in the last 30 (ties: current streak,
-  then best streak). The **Consistent** label in the leaderboard marks whoever has the most active days, once that is at
-  least **3**.
+- **Most consistent:** the contributor(s) with the **highest points in the last 30 days**. Everyone tied on that
+  score is listed and gets the **Consistent** label (not a fixed top 3), once the leader has at least **3** active days.
+- **Comeback champ:** someone who had been active, took a break of **2 or more days** without commits, and is now back
+  on a streak of **3 or more days in a row** (still running today or yesterday). The section lists everyone currently on
+  a comeback (longest comeback streak first, then longest break). The leader(s) get the **Comeback** label. Newcomers
+  without earlier activity don't count. Both thresholds are set in `COMEBACK` in `js/stats.js`.
 
 ## Project structure
 

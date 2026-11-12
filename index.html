@@ -82,7 +82,8 @@
           <div class="card-body p-0" id="leaderboard"></div>
           <div class="card-footer section-foot">
             10 points per day with at least one commit (not per commit), counting since <span id="startFoot">…</span>.
-            <span class="tag-consistent">Consistent</span> marks whoever has the most active days in the last 30 (from 3 days).
+            <span class="tag-consistent">Consistent</span> marks everyone tied on the highest points in the last 30 days (from 3 active days).
+            <span class="tag-consistent tag-comeback">Comeback</span> marks the comeback champ: back on a streak of 3+ days after a break of 2+ days.
             <i class="bi bi-lock"></i> includes commits in a private repository, verified by an admin.
             Select a row for details.
           </div>
@@ -97,6 +98,13 @@
             <span class="section-meta">Last 30 days</span>
           </div>
           <div class="card-body" id="consistent"></div>
+        </div>
+        <div class="card">
+          <div class="card-header section-head">
+            <h2 class="section-title">Comeback champ</h2>
+            <span class="section-meta">Back after a break</span>
+          </div>
+          <div class="card-body" id="comeback"></div>
         </div>
         <div class="card">
           <div class="card-header section-head"><h2 class="section-title">Summary</h2></div>

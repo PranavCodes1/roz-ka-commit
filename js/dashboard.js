@@ -2,12 +2,11 @@
 import { CONFIG } from './config.js';
 import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, mostConsistent, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
+import { buildLeaderboard, consistentLeaders, comebackChamps, COMEBACK, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
 const state = { students: [], activity: [], privateRows: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
-const CONSISTENT_MIN_DAYS = 3;
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
 
@@ -15,7 +14,7 @@ async function load() {
   const btn = $('#refreshBtn');
   btn.disabled = true;
   if (!state.loaded) {
-    for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = loadingHtml();
+    for (const id of ['#leaderboard', '#consistent', '#comeback', '#periodSummary', '#calendar']) $(id).innerHTML = loadingHtml();
   }
   $('#pageAlert').innerHTML = '';
   try {
@@ -31,7 +30,7 @@ async function load() {
   } catch (err) {
     console.error(err);
     $('#pageAlert').innerHTML = `<div class="mb-4">${errorHtml('Could not load data: ' + errMsg(err))}</div>`;
-    if (!state.loaded) for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = '';
+    if (!state.loaded) for (const id of ['#leaderboard', '#consistent', '#comeback', '#periodSummary', '#calendar']) $(id).innerHTML = '';
   } finally {
     btn.disabled = false;
   }
@@ -59,6 +58,7 @@ function renderLeaderboard(t) {
   if (!state.students.length) {
     el.innerHTML = emptyHtml('No contributors yet. An admin can add contributors on the <a href="admin.html">Admin</a> page.', 'bi-people');
     $('#consistent').innerHTML = emptyHtml('Nothing to show yet.');
+    $('#comeback').innerHTML = emptyHtml('Nothing to show yet.');
     return;
   }
   const rows = buildLeaderboard(state.students, state.activity, state.filter, t);
@@ -66,12 +66,12 @@ function renderLeaderboard(t) {
   const hasPrivate = new Set(state.privateRows
     .filter((p) => (pFrom === null || p.activity_date >= pFrom) && p.activity_date <= pTo)
     .map((p) => p.student_id));
-  const top = mostConsistent(buildLeaderboard(state.students, state.activity, 'all', t));
-  // "Consistent" label for the contributor(s) with the most active days in the last
-  // 30 (ties included) — only once that is at least CONSISTENT_MIN_DAYS, so a single
-  // active day doesn't earn it.
-  const best = top[0]?.consistency ?? 0;
-  const topIds = new Set(best >= CONSISTENT_MIN_DAYS ? top.filter((r) => r.consistency === best).map((r) => r.student.id) : []);
+  // Consistent = highest points in the last 30 days; every tie is included.
+  const top = consistentLeaders(buildLeaderboard(state.students, state.activity, 'all', t));
+  const topIds = new Set(top.map((r) => r.student.id));
+  // Comeback champs: back on a streak after a break.
+  const comebacks = comebackChamps(state.students, state.activity, t);
+  const champIds = new Set(comebacks.filter((c) => c.champion).map((c) => c.student.id));
 
   // Gold/silver/bronze tint for ranks 1-3, but only for contributors who have points.
   const medal = (rank, points) => `<span class="rank${rank <= 3 && points > 0 ? ` rank-${rank}` : ''}">${rank}</span>`;
@@ -84,7 +84,8 @@ function renderLeaderboard(t) {
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
-              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Most active days in the last 30 (${best})">Consistent</span>` : ''}</div>
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Highest points in the last 30 days (${top[0].consistencyPoints})">Consistent</span>` : ''}
+              ${champIds.has(r.student.id) ? '<span class="tag-consistent tag-comeback ms-1" title="Back on a streak after a break">Comeback</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
           </div>
@@ -120,7 +121,8 @@ function renderLeaderboard(t) {
   });
 
   $('#consistent').innerHTML = top.length
-    ? `<ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
+    ? `<p class="small text-body-secondary mb-3">${top.length === 1 ? 'Highest' : `${top.length} contributors tied on the highest`} points in the last 30 days: <span class="fw-semibold text-body num">${top[0].consistencyPoints} pts</span></p>
+      <ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
@@ -134,7 +136,19 @@ function renderLeaderboard(t) {
             <div class="small text-body-secondary">Streak ${r.currentStreak}d · best ${r.bestStreak}d</div>
           </div>
         </li>`).join('')}</ol>`
-    : emptyHtml('No commits in the last 30 days yet.');
+    : emptyHtml(`Shown once the leader has at least ${CONSISTENT_MIN_DAYS} active days in the last 30.`);
+
+  $('#comeback').innerHTML = comebacks.length
+    ? `<ol class="list-unstyled mb-0 d-flex flex-column gap-3">${comebacks.map((c) => `
+        <li class="d-flex align-items-center gap-2">
+          ${avatar(c.student, 36)}
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold text-truncate">${esc(c.student.name)}
+              ${c.champion ? '<span class="tag-consistent tag-comeback ms-1">Comeback champ</span>' : ''}</div>
+            <div class="small text-body-secondary">Back for <span class="text-body fw-semibold num">${c.streak} days</span> straight after a ${c.gap}-day break</div>
+          </div>
+        </li>`).join('')}</ol>`
+    : emptyHtml(`No comebacks right now. Someone qualifies after a break of ${COMEBACK.minGap}+ days followed by ${COMEBACK.minStreak}+ days in a row.`, 'bi-arrow-repeat');
 }
 
 function periodLabel(t) {
@@ -293,7 +307,7 @@ $('#refreshBtn').addEventListener('click', load);
 if (configError) {
   $('#pageAlert').innerHTML = `<div class="mb-4">${errorHtml(configError)}</div>`;
   $('#refreshBtn').disabled = true;
-  for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = emptyHtml('Waiting for configuration.');
+  for (const id of ['#leaderboard', '#consistent', '#comeback', '#periodSummary', '#calendar']) $(id).innerHTML = emptyHtml('Waiting for configuration.');
   $('#chartState').innerHTML = '';
   $('#chart').parentElement.classList.add('d-none');
 } else {

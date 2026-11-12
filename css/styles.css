@@ -240,6 +240,8 @@ body {
 
 .summary-table td, .summary-table th { white-space: nowrap; }
 
+.tag-comeback { color: var(--app-accent-text); border-color: color-mix(in srgb, var(--app-accent) 45%, var(--app-border)); }
+
 /* ---------- consistency ---------- */
 .consistency-bar { height: 6px; --bs-progress-bg: var(--app-subtle); }
 .consistency-bar .progress-bar { background: var(--app-accent); }

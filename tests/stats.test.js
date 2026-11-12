@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeStreaks, buildLeaderboard, mostConsistent, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
+import { computeStreaks, buildLeaderboard, consistentLeaders, findComeback, comebackChamps, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
 import { addDays, startOfWeek, dateInZone, diffDays, addMonths } from '../js/dates.js';
 
 const T = '2026-11-09'; // a Monday
@@ -89,10 +89,57 @@ test('periodRange', () => {
   assert.deepEqual(periodRange('all', T), [null, T]);
 });
 
-test('mostConsistent ranks by active days in last 30 days, skips inactive', () => {
-  const activity = [act(1, T), act(1, day(-1)), act(2, day(-5)), act(2, day(-6)), act(2, day(-7))];
-  const top = mostConsistent(buildLeaderboard(students, activity, 'all', T));
-  assert.deepEqual(top.map((r) => r.student.id), [2, 1]);
+test('consistentLeaders: everyone tied on the highest 30-day points, not a fixed top 3', () => {
+  const four = [1, 2, 3, 4].map((id) => ({ id, name: `P${id}`, github_username: `p${id}` }));
+  const days = (id, offsets) => offsets.map((o) => act(id, day(o)));
+  const activity = [
+    ...days(1, [0, -1, -2, -3]), // 40
+    ...days(2, [-5, -6, -7, -8]), // 40 (older, no current streak)
+    ...days(3, [0, -2, -4, -6]), // 40
+    ...days(4, [0, -1]), // 20
+  ];
+  const leaders = consistentLeaders(buildLeaderboard(four, activity, 'all', T));
+  assert.deepEqual(leaders.map((r) => [r.student.id, r.consistencyPoints]), [[1, 40], [3, 40], [2, 40]]); // ordered by streak
+  // activity older than 30 days doesn't count
+  assert.equal(consistentLeaders(buildLeaderboard(four, days(1, [-31, -32, -33]), 'all', T)).length, 0);
+  // the leader needs at least 3 active days
+  assert.equal(consistentLeaders(buildLeaderboard(four, days(1, [0, -1]), 'all', T)).length, 0);
+  assert.equal(consistentLeaders(buildLeaderboard(four, [], 'all', T)).length, 0);
+});
+
+test('findComeback: a break of 2+ days, then a current run of 3+ days', () => {
+  const at = (...offsets) => offsets.map((o) => day(o));
+  // active, 3-day break (-6,-5,-4), back for 4 days (-3..0)
+  assert.deepEqual(findComeback(at(-8, -7, -3, -2, -1, 0), T), { streak: 4, gap: 3, since: day(-3), before: day(-7) });
+  // streak alive until yesterday still counts
+  assert.equal(findComeback(at(-6, -3, -2, -1), T).streak, 3);
+  // only a 1-day break: not a comeback
+  assert.equal(findComeback(at(-5, -3, -2, -1, 0), T), null);
+  // back for only 2 days: not yet
+  assert.equal(findComeback(at(-6, -1, 0), T), null);
+  // streak already broken (last commit 2 days ago): no
+  assert.equal(findComeback(at(-9, -4, -3, -2), T), null);
+  // a newcomer with no earlier activity is not a comeback
+  assert.equal(findComeback(at(-2, -1, 0), T), null);
+  // thresholds are adjustable
+  assert.equal(findComeback(at(-5, -1, 0), T, { minGap: 2, minStreak: 2 }).gap, 3);
+});
+
+test('comebackChamps: longest comeback first, then longest break; ties share the champion title', () => {
+  const four = [1, 2, 3, 4].map((id) => ({ id, name: `P${id}`, github_username: `p${id}` }));
+  const days = (id, offsets) => offsets.map((o) => act(id, day(o)));
+  const activity = [
+    ...days(1, [-10, -4, -3, -2, -1, 0]), // back 5 days after 5-day break
+    ...days(2, [-12, -6, -5, -4, -3, -2, -1, 0]), // back 7 days after 5-day break -> champ
+    ...days(3, [-9, -3, -2, -1, 0]), // back 4 days after 5-day break
+    ...days(4, [0, -1, -2, -3]), // newcomer: not listed
+  ];
+  const list = comebackChamps(four, activity, T);
+  assert.deepEqual(list.map((c) => [c.student.id, c.streak, c.gap, c.champion]), [[2, 7, 5, true], [1, 5, 5, false], [3, 4, 5, false]]);
+  // tie on streak and break: both are champions
+  const tie = comebackChamps(four, [...days(1, [-6, -2, -1, 0]), ...days(2, [-6, -2, -1, 0])], T);
+  assert.deepEqual(tie.map((c) => c.champion), [true, true]);
+  assert.deepEqual(comebackChamps(four, [], T), []);
 });
 
 test('todaySummary ignores rows of removed students', () => {

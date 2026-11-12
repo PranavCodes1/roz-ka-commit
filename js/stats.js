@@ -79,6 +79,7 @@ export function buildLeaderboard(students, activity, filter, today) {
       currentStreak: streaks.current,
       bestStreak: streaks.best,
       consistency: rowsFor.filter((r) => r.activity_date >= consistencyFrom && r.commit_count > 0).length,
+      consistencyPoints: sum(rowsFor.filter((r) => r.activity_date >= consistencyFrom), 'points'),
     };
   });
 
@@ -94,16 +95,57 @@ export function buildLeaderboard(students, activity, filter, today) {
   return rows;
 }
 
-/** The top-n most consistent contributors (active days in the last 30 days). */
-export function mostConsistent(rows, n = 3) {
+/** A contributor needs at least this many active days in the window to be called consistent. */
+export const CONSISTENT_MIN_DAYS = 3;
+
+/**
+ * The most consistent contributors: highest points in the last 30 days, with EVERY
+ * contributor tied at that score included (not a fixed top 3). Empty until the leader
+ * has at least CONSISTENT_MIN_DAYS active days. Ties are listed by current streak, then name.
+ */
+export function consistentLeaders(rows, minDays = CONSISTENT_MIN_DAYS) {
+  const best = Math.max(0, ...rows.map((r) => r.consistencyPoints));
   return rows
-    .filter((r) => r.consistency > 0)
-    .sort((a, b) =>
-      b.consistency - a.consistency ||
-      b.currentStreak - a.currentStreak ||
-      b.bestStreak - a.bestStreak ||
-      a.student.name.localeCompare(b.student.name))
-    .slice(0, n);
+    .filter((r) => best > 0 && r.consistencyPoints === best && r.consistency >= minDays)
+    .sort((a, b) => b.currentStreak - a.currentStreak || a.student.name.localeCompare(b.student.name));
+}
+
+/** Comeback rules: a break of at least MIN_GAP days with no commits, then an active run of at least MIN_STREAK days. */
+export const COMEBACK = { minGap: 2, minStreak: 3 };
+
+/**
+ * If the contributor's CURRENT streak (alive today or yesterday) is at least `minStreak`
+ * days and began right after a break of at least `minGap` inactive days, following
+ * earlier activity, return { streak, gap, since, before }. Otherwise null.
+ * (Someone who has never been active before the streak is a newcomer, not a comeback.)
+ */
+export function findComeback(days, today, { minGap = COMEBACK.minGap, minStreak = COMEBACK.minStreak } = {}) {
+  const sorted = [...new Set(days)].filter((d) => d <= today).sort();
+  const { current } = computeStreaks(sorted, today);
+  if (current < minStreak) return null;
+  const since = sorted[sorted.length - current]; // first day of the current streak
+  const before = sorted[sorted.length - current - 1]; // last active day before the break
+  if (!before) return null;
+  const gap = diffDays(since, before) - 1; // inactive days in between
+  return gap >= minGap ? { streak: current, gap, since, before } : null;
+}
+
+/**
+ * Everyone currently on a comeback, best first: longest comeback streak, then longest
+ * break, then name. `champion` is true for the leader(s) (ties included).
+ */
+export function comebackChamps(students, activity, today, opts) {
+  const byStudent = groupByStudent(activity);
+  const list = students
+    .map((s) => {
+      const days = (byStudent.get(s.id) || []).filter((r) => r.commit_count > 0).map((r) => r.activity_date);
+      const c = findComeback(days, today, opts);
+      return c && { student: s, ...c };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.streak - a.streak || b.gap - a.gap || a.student.name.localeCompare(b.student.name));
+  list.forEach((c) => { c.champion = c.streak === list[0].streak && c.gap === list[0].gap; });
+  return list;
 }
 
 /** Headline numbers for today. */
