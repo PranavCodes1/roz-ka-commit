@@ -146,7 +146,6 @@ function renderLeaderboard(t) {
       <div class="flex-grow-1 min-w-0">
         <div class="fw-semibold text-truncate">${esc(c.student.name)}
           <span class="tag-consistent tag-comeback ms-1">Comeback champ</span></div>
-        <div class="small text-body-secondary">Back for <span class="text-body fw-semibold num">${c.streak} days</span> straight after a ${c.gap}-day break</div>
       </div>
     </li>`).join('')}</ol>`;
 }
