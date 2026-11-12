@@ -131,12 +131,12 @@ export function findComeback(days, today, { minGap = COMEBACK.minGap, minStreak 
 }
 
 /**
- * Everyone currently on a comeback, best first: longest comeback streak, then longest
- * break, then name. `champion` is true for the leader(s) (ties included).
+ * Everyone currently on a comeback (each one a "comeback champ"), best first:
+ * longest comeback streak, then longest break, then name.
  */
 export function comebackChamps(students, activity, today, opts) {
   const byStudent = groupByStudent(activity);
-  const list = students
+  return students
     .map((s) => {
       const days = (byStudent.get(s.id) || []).filter((r) => r.commit_count > 0).map((r) => r.activity_date);
       const c = findComeback(days, today, opts);
@@ -144,8 +144,6 @@ export function comebackChamps(students, activity, today, opts) {
     })
     .filter(Boolean)
     .sort((a, b) => b.streak - a.streak || b.gap - a.gap || a.student.name.localeCompare(b.student.name));
-  list.forEach((c) => { c.champion = c.streak === list[0].streak && c.gap === list[0].gap; });
-  return list;
 }
 
 /** Headline numbers for today. */

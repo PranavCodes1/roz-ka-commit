@@ -125,7 +125,7 @@ test('findComeback: a break of 2+ days, then a current run of 3+ days', () => {
   assert.equal(findComeback(at(-5, -1, 0), T, { minGap: 2, minStreak: 2 }).gap, 3);
 });
 
-test('comebackChamps: longest comeback first, then longest break; ties share the champion title', () => {
+test('comebackChamps: everyone back after a break, longest comeback first, then longest break', () => {
   const four = [1, 2, 3, 4].map((id) => ({ id, name: `P${id}`, github_username: `p${id}` }));
   const days = (id, offsets) => offsets.map((o) => act(id, day(o)));
   const activity = [
@@ -135,10 +135,10 @@ test('comebackChamps: longest comeback first, then longest break; ties share the
     ...days(4, [0, -1, -2, -3]), // newcomer: not listed
   ];
   const list = comebackChamps(four, activity, T);
-  assert.deepEqual(list.map((c) => [c.student.id, c.streak, c.gap, c.champion]), [[2, 7, 5, true], [1, 5, 5, false], [3, 4, 5, false]]);
-  // tie on streak and break: both are champions
-  const tie = comebackChamps(four, [...days(1, [-6, -2, -1, 0]), ...days(2, [-6, -2, -1, 0])], T);
-  assert.deepEqual(tie.map((c) => c.champion), [true, true]);
+  assert.deepEqual(list.map((c) => [c.student.id, c.streak, c.gap]), [[2, 7, 5], [1, 5, 5], [3, 4, 5]]);
+  // a longer break ranks higher when the comeback streak is equal
+  const two = comebackChamps(four, [...days(1, [-6, -2, -1, 0]), ...days(2, [-9, -2, -1, 0])], T);
+  assert.deepEqual(two.map((c) => [c.student.id, c.gap]), [[2, 6], [1, 3]]);
   assert.deepEqual(comebackChamps(four, [], T), []);
 });
 
