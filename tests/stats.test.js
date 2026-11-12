@@ -107,7 +107,7 @@ test('consistentLeaders: everyone tied on the highest 30-day points, not a fixed
   assert.equal(consistentLeaders(buildLeaderboard(four, [], 'all', T)).length, 0);
 });
 
-test('findComeback: a break of 2+ days, then a current run of 3+ days', () => {
+test('findComeback: a break of 2+ days, then committing again (one day is enough)', () => {
   const at = (...offsets) => offsets.map((o) => day(o));
   // active, 3-day break (-6,-5,-4), back for 4 days (-3..0)
   assert.deepEqual(findComeback(at(-8, -7, -3, -2, -1, 0), T), { streak: 4, gap: 3, since: day(-3), before: day(-7) });
@@ -115,13 +115,17 @@ test('findComeback: a break of 2+ days, then a current run of 3+ days', () => {
   assert.equal(findComeback(at(-6, -3, -2, -1), T).streak, 3);
   // only a 1-day break: not a comeback
   assert.equal(findComeback(at(-5, -3, -2, -1, 0), T), null);
-  // back for only 2 days: not yet
-  assert.equal(findComeback(at(-6, -1, 0), T), null);
+  // a single day back after the break is already a comeback (today or yesterday)
+  assert.deepEqual(findComeback(at(-6, 0), T), { streak: 1, gap: 5, since: day(0), before: day(-6) });
+  assert.deepEqual(findComeback(at(-6, -1), T), { streak: 1, gap: 4, since: day(-1), before: day(-6) }); // back yesterday
   // streak already broken (last commit 2 days ago): no
   assert.equal(findComeback(at(-9, -4, -3, -2), T), null);
   // a newcomer with no earlier activity is not a comeback
   assert.equal(findComeback(at(-2, -1, 0), T), null);
+  // the comeback ends once they miss a whole day again
+  assert.equal(findComeback(at(-6, -2), T), null);
   // thresholds are adjustable
+  assert.equal(findComeback(at(-6, 0), T, { minGap: 2, minStreak: 3 }), null);
   assert.equal(findComeback(at(-5, -1, 0), T, { minGap: 2, minStreak: 2 }).gap, 3);
 });
 

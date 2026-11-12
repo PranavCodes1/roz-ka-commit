@@ -110,8 +110,8 @@ export function consistentLeaders(rows, minDays = CONSISTENT_MIN_DAYS) {
     .sort((a, b) => b.currentStreak - a.currentStreak || a.student.name.localeCompare(b.student.name));
 }
 
-/** Comeback rules: a break of at least MIN_GAP days with no commits, then an active run of at least MIN_STREAK days. */
-export const COMEBACK = { minGap: 2, minStreak: 3 };
+/** Comeback rules: a break of at least `minGap` days with no commits, then commits again on at least `minStreak` day(s) in a row. */
+export const COMEBACK = { minGap: 2, minStreak: 1 };
 
 /**
  * If the contributor's CURRENT streak (alive today or yesterday) is at least `minStreak`
