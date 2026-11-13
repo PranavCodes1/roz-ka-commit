@@ -65,8 +65,9 @@ day, not about points: it doesn't compare contributors, and any number of people
 4. **One missed day breaks it.** If a whole IST day passes without a commit, the streak resets to 0 at midnight and the
    tag is removed. After that, 3 new consecutive days earn it back.
 
-Where it shows: the **Most consistent** section lists everyone with the tag and their "N days in a row" (longest first),
-and the leaderboard shows a **Consistent** tag next to their names.
+Where it shows: the **Most consistent** section lists everyone with the tag (longest streak first) with their
+"N days in a row", a fill-up bar of **active days in the last 30** (e.g. 5/30), and their current and best streak. The
+leaderboard shows a **Consistent** tag next to their names. The bar is for information only; the tag depends on the streak.
 
 *Example:* commits on 10, 11 and 12 Nov, so Consistent on 12 Nov, and still on 13 Nov until 11:59 PM even with no commit
 yet. A commit on 13 Nov makes it 4 days in a row. No commit on 13 Nov, so at 12:00 AM on 14 Nov the streak is 0 and the

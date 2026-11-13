@@ -191,5 +191,8 @@ test('Consistent: the IST clock decides the day at midnight', () => {
 
 test('Consistent: points are unchanged by the new rule', () => {
   const [row] = buildLeaderboard(crew, on(1, '2026-11-10', '2026-11-11', '2026-11-12'), 'all', '2026-11-12');
-  assert.deepEqual([row.points, row.activeDays, row.currentStreak, row.bestStreak], [30, 3, 3, 3]);
+  assert.deepEqual([row.points, row.activeDays, row.currentStreak, row.bestStreak, row.activeLast30], [30, 3, 3, 3, 3]);
+  // the bar counts active days in the last 30 only
+  const [old] = buildLeaderboard(crew, on(1, '2026-10-01', '2026-11-12'), 'all', '2026-11-12');
+  assert.equal(old.activeLast30, 1);
 });

@@ -74,6 +74,8 @@ export function buildLeaderboard(students, activity, filter, today) {
       totalPoints: sum(rowsFor, 'points'),
       currentStreak: streaks.current,
       bestStreak: streaks.best,
+      // display only (the bar in "Most consistent"): active days in the last 30 IST days
+      activeLast30: rowsFor.filter((r) => r.activity_date >= addDays(today, -29) && r.commit_count > 0).length,
     };
   });
 

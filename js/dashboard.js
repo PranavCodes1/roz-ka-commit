@@ -134,9 +134,16 @@ function renderLeaderboard(t) {
       <ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
-          <div class="flex-grow-1 min-w-0 d-flex justify-content-between align-items-center gap-2">
-            <span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
-            <span class="text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="small text-body-secondary">days in a row</span></span>
+          <div class="flex-grow-1 min-w-0">
+            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
+              <span class="small text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="text-body-secondary">days in a row</span></span></div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.activeLast30}" aria-valuemin="0" aria-valuemax="30">
+                <div class="progress-bar" style="width:${Math.round((r.activeLast30 / 30) * 100)}%"></div>
+              </div>
+              <span class="small num">${r.activeLast30}/30</span>
+            </div>
+            <div class="small text-body-secondary">Streak ${r.currentStreak}d · best ${r.bestStreak}d</div>
           </div>
         </li>`).join('')}</ol>`
     : emptyHtml(`Commit ${CONSISTENT_MIN_DAYS} days in a row to become Consistent.`, 'bi-calendar-check');
