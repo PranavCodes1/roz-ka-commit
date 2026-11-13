@@ -59,11 +59,18 @@ Two labels highlight contributors on the dashboard. They're only there to motiva
 1. RKC adds up each contributor's points for the last 30 days, which is 10 per active day.
 2. The highest total wins, and **everyone tied on that total** gets the label, however many people that is.
 3. The leader needs at least **3 active days** in that window, so nobody gets it on their first day.
+4. **The tag lasts the whole day (IST, 12:00 AM to 11:59 PM).** Whoever qualified at the end of yesterday keeps it all
+   of today, even before their commit for today and even if someone else commits first. Anyone who takes the lead
+   during the day gets it immediately. At midnight IST, the day that just ended is counted: anyone who fell behind by
+   not committing that day loses the tag. The dashboard also refreshes itself at midnight if it's left open.
 
 Where it shows: the **Most consistent** section lists everyone with the label, and the leaderboard shows a
 **Consistent** tag next to their names.
 
 *Example:* in the last 30 days Asha and Chen both have 70 points and Ravi has 50, so Asha **and** Chen are Consistent.
+*Example (whole day):* A, B, C and D each have 40 points at the end of 12 Nov. On 13 Nov at 9 AM, A commits (50 points).
+B, C and D **keep** the tag for the rest of 13 Nov. On 14 Nov, whoever didn't commit on 13 Nov has fallen behind A and no
+longer has it.
 
 ### Comeback champ
 **Who gets it:** someone who **comes back after a break**.

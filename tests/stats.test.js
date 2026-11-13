@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeStreaks, buildLeaderboard, consistentLeaders, findComeback, comebackChamps, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
-import { addDays, startOfWeek, dateInZone, diffDays, addMonths } from '../js/dates.js';
+import { computeStreaks, buildLeaderboard, consistentLeaders, consistentHolders, findComeback, comebackChamps, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
+import { addDays, startOfWeek, dateInZone, todayIn, diffDays, addMonths } from '../js/dates.js';
 
 const T = '2026-11-09'; // a Monday
 const day = (n) => addDays(T, n);
@@ -165,4 +165,51 @@ test('calendarValues', () => {
   const activity = [act(1, T, 2), act(2, T, 5), act(1, day(-1), 1)];
   assert.equal(calendarValues(activity, 'students').get(T), 2);
   assert.equal(calendarValues(activity, 'commits').get(T), 7);
+});
+
+
+// ---------- Consistent tag lasts the whole IST day ----------
+const crew = ['A', 'B', 'C', 'D', 'F'].map((name, i) => ({ id: i + 1, name, github_username: name.toLowerCase() }));
+const on = (id, ...dates) => dates.map((d) => ({ student_id: id, activity_date: d, commit_count: 1, points: 10 }));
+const fourDays = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12'];
+const base = [1, 2, 3, 4].flatMap((id) => on(id, ...fourDays)); // A-D: 40 pts each by the end of 12 Nov
+const holders = (activity, today) => consistentHolders(crew, activity, today).map((r) => r.student.name);
+
+test('Consistent: kept all day even when someone else commits first', () => {
+  assert.deepEqual(holders(base, '2026-11-13'), ['A', 'B', 'C', 'D']); // 00:00, nobody has committed
+  const aCommitted = [...base, ...on(1, '2026-11-13')]; // A commits at 09:00 -> 50 pts
+  assert.deepEqual(holders(aCommitted, '2026-11-13'), ['A', 'B', 'C', 'D']); // B, C, D keep it for the rest of the day
+  assert.deepEqual(consistentHolders(crew, aCommitted, '2026-11-13')[0].consistencyPoints, 50); // A listed first
+});
+
+test('Consistent: after midnight IST, whoever missed the day falls behind and loses it', () => {
+  const aOnly = [...base, ...on(1, '2026-11-13')];
+  assert.deepEqual(holders(aOnly, '2026-11-14'), ['A']);
+  // everyone who committed on 13 Nov keeps it on 14 Nov
+  const abc = [...base, ...on(1, '2026-11-13'), ...on(2, '2026-11-13'), ...on(3, '2026-11-13')];
+  assert.deepEqual(holders(abc, '2026-11-14'), ['A', 'B', 'C']);
+  // if nobody committed on 13 Nov, nobody fell behind: all keep it (same criteria as before)
+  assert.deepEqual(holders(base, '2026-11-14'), ['A', 'B', 'C', 'D']);
+});
+
+test('Consistent: someone who reaches the top today gets it immediately', () => {
+  const fBehind = [...base, ...on(5, '2026-11-10', '2026-11-11', '2026-11-12')]; // F: 30 pts
+  assert.deepEqual(holders(fBehind, '2026-11-13'), ['A', 'B', 'C', 'D']);
+  const fCatchesUp = [...fBehind, ...on(5, '2026-11-13')]; // F commits today -> 40, tied on top now
+  assert.deepEqual(holders(fCatchesUp, '2026-11-13'), ['A', 'B', 'C', 'D', 'F']);
+});
+
+test('Consistent: the IST day boundary decides which day it is', () => {
+  const aOnly = [...base, ...on(1, '2026-11-13')];
+  const before = todayIn('Asia/Kolkata', new Date('2026-11-13T18:29:00Z')); // 23:59 IST, 13 Nov
+  const after = todayIn('Asia/Kolkata', new Date('2026-11-13T18:31:00Z')); // 00:01 IST, 14 Nov
+  assert.deepEqual([before, after], ['2026-11-13', '2026-11-14']);
+  assert.deepEqual(holders(aOnly, before), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(holders(aOnly, after), ['A']);
+});
+
+test('Consistent: still needs 3 active days (criteria unchanged)', () => {
+  const twoDays = on(1, '2026-11-11', '2026-11-12');
+  assert.deepEqual(holders(twoDays, '2026-11-13'), []);
+  assert.deepEqual(holders([...twoDays, ...on(1, '2026-11-13')], '2026-11-13'), ['A']); // 3rd day today: qualifies now
 });

@@ -110,6 +110,31 @@ export function consistentLeaders(rows, minDays = CONSISTENT_MIN_DAYS) {
     .sort((a, b) => b.currentStreak - a.currentStreak || a.student.name.localeCompare(b.student.name));
 }
 
+/**
+ * Who shows the Consistent tag on `today` (an IST 'YYYY-MM-DD'). Same criteria as
+ * consistentLeaders(), evaluated twice and combined:
+ *  1. as of the END OF YESTERDAY (completed days only): whoever qualified then keeps the
+ *     tag for the whole of today, so nobody loses it just because another contributor
+ *     committed earlier in the day or because their own commit for today isn't in yet;
+ *  2. as of NOW (including today's commits): whoever takes the lead today gets it at once.
+ * At midnight IST the day is complete and becomes "yesterday": anyone who fell behind by
+ * missing it no longer qualifies under (1).
+ * Returns today's leaderboard rows (current points/streaks), highest 30-day points first.
+ */
+export function consistentHolders(students, activity, today, minDays = CONSISTENT_MIN_DAYS) {
+  const nowRows = buildLeaderboard(students, activity, 'all', today);
+  const ids = new Set([
+    ...consistentLeaders(buildLeaderboard(students, activity, 'all', addDays(today, -1)), minDays),
+    ...consistentLeaders(nowRows, minDays),
+  ].map((r) => r.student.id));
+  return nowRows
+    .filter((r) => ids.has(r.student.id))
+    .sort((a, b) =>
+      b.consistencyPoints - a.consistencyPoints ||
+      b.currentStreak - a.currentStreak ||
+      a.student.name.localeCompare(b.student.name));
+}
+
 /** Comeback rules: a break of at least `minGap` days with no commits, then commits again on at least `minStreak` day(s) in a row. */
 export const COMEBACK = { minGap: 2, minStreak: 1 };
 

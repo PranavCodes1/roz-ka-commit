@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, consistentLeaders, comebackChamps, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
+import { buildLeaderboard, consistentHolders, comebackChamps, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
 const state = { students: [], activity: [], privateRows: [], filter: 'all', unit: 'week', chart: null, loaded: false };
@@ -10,7 +10,11 @@ const today = () => todayIn(CONFIG.TIMEZONE);
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
 
+let loading = false;
+
 async function load() {
+  if (loading) return;
+  loading = true;
   const btn = $('#refreshBtn');
   btn.disabled = true;
   if (!state.loaded) {
@@ -33,11 +37,15 @@ async function load() {
     if (!state.loaded) for (const id of ['#leaderboard', '#consistent', '#periodSummary', '#calendar']) $(id).innerHTML = '';
   } finally {
     btn.disabled = false;
+    loading = false;
   }
 }
 
+let renderedDay = null;
+
 function render() {
   const t = today();
+  renderedDay = t;
   const s = todaySummary(state.students, state.activity, t);
   $('#statStudents').textContent = s.totalStudents;
   $('#statActive').innerHTML = `${s.activeToday}${s.totalStudents ? `<span class="stat-of"> / ${s.totalStudents}</span>` : ''}`;
@@ -67,7 +75,8 @@ function renderLeaderboard(t) {
     .filter((p) => (pFrom === null || p.activity_date >= pFrom) && p.activity_date <= pTo)
     .map((p) => p.student_id));
   // Consistent = highest points in the last 30 days; every tie is included.
-  const top = consistentLeaders(buildLeaderboard(state.students, state.activity, 'all', t));
+  // Kept for the whole IST day by whoever qualified at the end of yesterday, plus anyone who leads now.
+  const top = consistentHolders(state.students, state.activity, t);
   const topIds = new Set(top.map((r) => r.student.id));
   // Comeback champs: back on a streak after a break.
   const comebacks = comebackChamps(state.students, state.activity, t);
@@ -84,7 +93,7 @@ function renderLeaderboard(t) {
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
-              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Highest points in the last 30 days (${top[0].consistencyPoints})">Consistent</span>` : ''}
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Highest points in the last 30 days">Consistent</span>` : ''}
               ${champIds.has(r.student.id) ? '<span class="tag-consistent tag-comeback ms-1" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
@@ -121,12 +130,13 @@ function renderLeaderboard(t) {
   });
 
   $('#consistent').innerHTML = top.length
-    ? `<p class="small text-body-secondary mb-3">${top.length === 1 ? 'Highest' : `${top.length} contributors tied on the highest`} points in the last 30 days: <span class="fw-semibold text-body num">${top[0].consistencyPoints} pts</span></p>
+    ? `<p class="small text-body-secondary mb-3">Highest points in the last 30 days. You keep the tag for the whole day; commit before midnight to stay on top.</p>
       <ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
-            <div class="fw-semibold text-truncate">${esc(r.student.name)}</div>
+            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
+              <span class="small num text-nowrap">${r.consistencyPoints} pts</span></div>
             <div class="d-flex align-items-center gap-2 mt-1">
               <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.consistency}" aria-valuemin="0" aria-valuemax="30">
                 <div class="progress-bar" style="width:${Math.round((r.consistency / 30) * 100)}%"></div>
@@ -311,4 +321,6 @@ if (configError) {
   $('#chart').parentElement.classList.add('d-none');
 } else {
   load();
+  // If the page stays open past midnight IST, reload so "today" (tags, streaks, today's numbers) moves on.
+  setInterval(() => { if (state.loaded && today() !== renderedDay) load(); }, 60_000);
 }
