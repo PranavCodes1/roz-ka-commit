@@ -54,23 +54,26 @@ Commits from before that date are never stored, so they give no points, streaks 
 Two labels highlight contributors on the dashboard. They're only there to motivate, and never affect points.
 
 ### Consistent
-**Who gets it:** the contributor(s) with the **highest points in the last 30 days** (today and the 29 days before).
+**Who gets it:** anyone who has committed **every day for at least 3 days in a row** (IST days). It's about coding every
+day, not about points: it doesn't compare contributors, and any number of people can have it at once.
 
-1. RKC adds up each contributor's points for the last 30 days, which is 10 per active day.
-2. The highest total wins, and **everyone tied on that total** gets the label, however many people that is.
-3. The leader needs at least **3 active days** in that window, so nobody gets it on their first day.
-4. **The tag lasts the whole day (IST, 12:00 AM to 11:59 PM).** Whoever qualified at the end of yesterday keeps it all
-   of today, even before their commit for today and even if someone else commits first. Anyone who takes the lead
-   during the day gets it immediately. At midnight IST, the day that just ended is counted: anyone who fell behind by
-   not committing that day loses the tag. The dashboard also refreshes itself at midnight if it's left open.
+1. RKC counts each contributor's **streak**: consecutive IST days with at least one qualifying commit (or verified
+   private-repo work). It's shown in the leaderboard's **Streak** column, separately from points.
+2. With a streak of **3 or more days**, the contributor gets the **Consistent** tag.
+3. **You have the whole day.** Until **11:59 PM IST** a streak that ended yesterday is still alive, so the tag stays
+   all day, even before today's commit.
+4. **One missed day breaks it.** If a whole IST day passes without a commit, the streak resets to 0 at midnight and the
+   tag is removed. After that, 3 new consecutive days earn it back.
 
-Where it shows: the **Most consistent** section lists everyone with the label, and the leaderboard shows a
-**Consistent** tag next to their names.
+Where it shows: the **Most consistent** section lists everyone with the tag and their "N days in a row" (longest first),
+and the leaderboard shows a **Consistent** tag next to their names.
 
-*Example:* in the last 30 days Asha and Chen both have 70 points and Ravi has 50, so Asha **and** Chen are Consistent.
-*Example (whole day):* A, B, C and D each have 40 points at the end of 12 Nov. On 13 Nov at 9 AM, A commits (50 points).
-B, C and D **keep** the tag for the rest of 13 Nov. On 14 Nov, whoever didn't commit on 13 Nov has fallen behind A and no
-longer has it.
+*Example:* commits on 10, 11 and 12 Nov, so Consistent on 12 Nov, and still on 13 Nov until 11:59 PM even with no commit
+yet. A commit on 13 Nov makes it 4 days in a row. No commit on 13 Nov, so at 12:00 AM on 14 Nov the streak is 0 and the
+tag is gone; commits on 14, 15 and 16 Nov earn it back.
+
+**Timing:** a sync runs every hour, including at 12:00 AM IST, so commits made just before midnight are counted for the
+right day within about a minute. The dashboard refreshes itself at midnight if it's left open.
 
 ### Comeback champ
 **Who gets it:** someone who **comes back after a break**.
@@ -94,7 +97,7 @@ a **Comeback champ** tag next to their names in the leaderboard. The section is 
 | Came back Thu, then nothing Fri or Sat | ❌ again from Saturday (the run ended) |
 
 Both thresholds can be changed in `COMEBACK` in `js/stats.js`: `minGap` (break length, now 2 days) and `minStreak`
-(days back in a row, now 1). For Consistent, `CONSISTENT_MIN_DAYS` (now 3) is in the same file.
+(days back in a row, now 1). For Consistent, `CONSISTENT_MIN_DAYS` (days in a row, now 3) is in the same file.
 
 ## Project structure
 

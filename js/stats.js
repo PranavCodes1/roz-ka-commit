@@ -53,9 +53,6 @@ function groupByStudent(activity) {
   return map;
 }
 
-/** Days active in the last `window` days (including today). */
-export const CONSISTENCY_WINDOW = 30;
-
 /**
  * One row per student with period totals plus all-time stats, sorted and ranked.
  * Order: points desc → active days desc → commits desc → name.
@@ -63,7 +60,6 @@ export const CONSISTENCY_WINDOW = 30;
  */
 export function buildLeaderboard(students, activity, filter, today) {
   const range = periodRange(filter, today);
-  const consistencyFrom = addDays(today, -(CONSISTENCY_WINDOW - 1));
   const byStudent = groupByStudent(activity);
 
   const rows = students.map((s) => {
@@ -78,8 +74,6 @@ export function buildLeaderboard(students, activity, filter, today) {
       totalPoints: sum(rowsFor, 'points'),
       currentStreak: streaks.current,
       bestStreak: streaks.best,
-      consistency: rowsFor.filter((r) => r.activity_date >= consistencyFrom && r.commit_count > 0).length,
-      consistencyPoints: sum(rowsFor.filter((r) => r.activity_date >= consistencyFrom), 'points'),
     };
   });
 
@@ -95,44 +89,20 @@ export function buildLeaderboard(students, activity, filter, today) {
   return rows;
 }
 
-/** A contributor needs at least this many active days in the window to be called consistent. */
+/** Consecutive days (IST) with at least one qualifying commit needed for the Consistent tag. */
 export const CONSISTENT_MIN_DAYS = 3;
 
 /**
- * The most consistent contributors: highest points in the last 30 days, with EVERY
- * contributor tied at that score included (not a fixed top 3). Empty until the leader
- * has at least CONSISTENT_MIN_DAYS active days. Ties are listed by current streak, then name.
+ * Consistent contributors: everyone whose CURRENT streak of consecutive IST days with a
+ * commit is at least `minDays`. It doesn't depend on points or on other contributors.
+ * The current streak (computeStreaks) stays alive until the end of today, so a contributor
+ * keeps the tag all day even before today's commit; at midnight IST, a day without a
+ * commit resets the streak to 0 and the tag goes. Longest streak first, then name.
  */
-export function consistentLeaders(rows, minDays = CONSISTENT_MIN_DAYS) {
-  const best = Math.max(0, ...rows.map((r) => r.consistencyPoints));
+export function consistentContributors(rows, minDays = CONSISTENT_MIN_DAYS) {
   return rows
-    .filter((r) => best > 0 && r.consistencyPoints === best && r.consistency >= minDays)
+    .filter((r) => r.currentStreak >= minDays)
     .sort((a, b) => b.currentStreak - a.currentStreak || a.student.name.localeCompare(b.student.name));
-}
-
-/**
- * Who shows the Consistent tag on `today` (an IST 'YYYY-MM-DD'). Same criteria as
- * consistentLeaders(), evaluated twice and combined:
- *  1. as of the END OF YESTERDAY (completed days only): whoever qualified then keeps the
- *     tag for the whole of today, so nobody loses it just because another contributor
- *     committed earlier in the day or because their own commit for today isn't in yet;
- *  2. as of NOW (including today's commits): whoever takes the lead today gets it at once.
- * At midnight IST the day is complete and becomes "yesterday": anyone who fell behind by
- * missing it no longer qualifies under (1).
- * Returns today's leaderboard rows (current points/streaks), highest 30-day points first.
- */
-export function consistentHolders(students, activity, today, minDays = CONSISTENT_MIN_DAYS) {
-  const nowRows = buildLeaderboard(students, activity, 'all', today);
-  const ids = new Set([
-    ...consistentLeaders(buildLeaderboard(students, activity, 'all', addDays(today, -1)), minDays),
-    ...consistentLeaders(nowRows, minDays),
-  ].map((r) => r.student.id));
-  return nowRows
-    .filter((r) => ids.has(r.student.id))
-    .sort((a, b) =>
-      b.consistencyPoints - a.consistencyPoints ||
-      b.currentStreak - a.currentStreak ||
-      a.student.name.localeCompare(b.student.name));
 }
 
 /** Comeback rules: a break of at least `minGap` days with no commits, then commits again on at least `minStreak` day(s) in a row. */

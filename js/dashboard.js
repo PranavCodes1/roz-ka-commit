@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, consistentHolders, comebackChamps, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
+import { buildLeaderboard, consistentContributors, comebackChamps, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
 const state = { students: [], activity: [], privateRows: [], filter: 'all', unit: 'week', chart: null, loaded: false };
@@ -74,9 +74,9 @@ function renderLeaderboard(t) {
   const hasPrivate = new Set(state.privateRows
     .filter((p) => (pFrom === null || p.activity_date >= pFrom) && p.activity_date <= pTo)
     .map((p) => p.student_id));
-  // Consistent = highest points in the last 30 days; every tie is included.
-  // Kept for the whole IST day by whoever qualified at the end of yesterday, plus anyone who leads now.
-  const top = consistentHolders(state.students, state.activity, t);
+  // Consistent = a current streak of 3+ consecutive IST days with a commit (independent of points).
+  // The streak stays alive until 11:59 PM IST, so the tag lasts all day; a missed day breaks it at midnight.
+  const top = consistentContributors(buildLeaderboard(state.students, state.activity, 'all', t));
   const topIds = new Set(top.map((r) => r.student.id));
   // Comeback champs: back on a streak after a break.
   const comebacks = comebackChamps(state.students, state.activity, t);
@@ -93,7 +93,7 @@ function renderLeaderboard(t) {
           <div class="min-w-0">
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
-              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Highest points in the last 30 days">Consistent</span>` : ''}
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Committed ${r.currentStreak} days in a row">Consistent</span>` : ''}
               ${champIds.has(r.student.id) ? '<span class="tag-consistent tag-comeback ms-1" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
@@ -115,7 +115,7 @@ function renderLeaderboard(t) {
           <th class="text-end">Points</th>
           <th class="text-end d-none d-sm-table-cell">Commits</th>
           <th class="text-end d-none d-md-table-cell">Active days</th>
-          <th class="text-end" title="Consecutive days with a commit">Streak</th>
+          <th class="text-end" title="Consecutive days (IST) with at least one commit">Streak</th>
           <th class="text-end d-none d-md-table-cell">Best</th>
         </tr></thead>
         <tbody>${body}</tbody>
@@ -130,23 +130,16 @@ function renderLeaderboard(t) {
   });
 
   $('#consistent').innerHTML = top.length
-    ? `<p class="small text-body-secondary mb-3">Highest points in the last 30 days. You keep the tag for the whole day; commit before midnight to stay on top.</p>
+    ? `<p class="small text-body-secondary mb-3">Committed every day for ${CONSISTENT_MIN_DAYS}+ days in a row. Commit before 11:59 PM IST each day to keep it.</p>
       <ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
-          <div class="flex-grow-1 min-w-0">
-            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
-              <span class="small num text-nowrap">${r.consistencyPoints} pts</span></div>
-            <div class="d-flex align-items-center gap-2 mt-1">
-              <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.consistency}" aria-valuemin="0" aria-valuemax="30">
-                <div class="progress-bar" style="width:${Math.round((r.consistency / 30) * 100)}%"></div>
-              </div>
-              <span class="small num">${r.consistency}/30</span>
-            </div>
-            <div class="small text-body-secondary">Streak ${r.currentStreak}d · best ${r.bestStreak}d</div>
+          <div class="flex-grow-1 min-w-0 d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
+            <span class="text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="small text-body-secondary">days in a row</span></span>
           </div>
         </li>`).join('')}</ol>`
-    : emptyHtml(`Shown once the leader has at least ${CONSISTENT_MIN_DAYS} active days in the last 30.`);
+    : emptyHtml(`Commit ${CONSISTENT_MIN_DAYS} days in a row to become Consistent.`, 'bi-calendar-check');
 
   // Only shown when someone is on a comeback: it's there to celebrate, never to point out gaps.
   $('#comebackCard').classList.toggle('d-none', comebacks.length === 0);
