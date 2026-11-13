@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeStreaks, buildLeaderboard, consistentContributors, findComeback, comebackChamps, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
+import { computeStreaks, buildLeaderboard, consistentContributors, milestoneFor, milestoneByDays, MILESTONES, findComeback, comebackChamps, todaySummary, periodSeries, periodRange, calendarValues } from '../js/stats.js';
 import { addDays, startOfWeek, dateInZone, todayIn, diffDays, addMonths } from '../js/dates.js';
 
 const T = '2026-11-09'; // a Monday
@@ -195,4 +195,28 @@ test('Consistent: points are unchanged by the new rule', () => {
   // the bar counts active days in the last 30 only
   const [old] = buildLeaderboard(crew, on(1, '2026-10-01', '2026-11-12'), 'all', '2026-11-12');
   assert.equal(old.activeLast30, 1);
+});
+
+
+// ---------- consistency milestones ----------
+test('milestoneFor: highest milestone reached by the current streak', () => {
+  assert.equal(milestoneFor(0), null);
+  assert.equal(milestoneFor(4), null);
+  assert.equal(milestoneFor(5).name, 'On Fire');
+  assert.equal(milestoneFor(6).name, 'On Fire');
+  assert.equal(milestoneFor(7).name, 'Week Warrior');
+  assert.equal(milestoneFor(13).days, 7);
+  assert.equal(milestoneFor(14).name, 'Dedicated Coder');
+  assert.equal(milestoneFor(30).emoji, '💎');
+  assert.equal(milestoneFor(364).days, 200);
+  assert.equal(milestoneFor(500).name, 'Year-Round Coder');
+  assert.equal(milestoneByDays(21).name, 'Habit Builder');
+  assert.equal(milestoneByDays(6), null);
+});
+
+test('MILESTONES match the database list in schema.sql', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const sql = await readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
+  const dbList = sql.match(/select array\[([\d,\s]+)\]/)[1].split(',').map((x) => Number(x.trim()));
+  assert.deepEqual(MILESTONES.map((m) => m.days), dbList);
 });

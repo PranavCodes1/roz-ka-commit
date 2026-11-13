@@ -183,6 +183,7 @@ begin
   new.updated_at := now();
   if lower(new.github_username) <> lower(old.github_username) then
     delete from public.commits where student_id = old.id;
+    delete from public.milestone_announcements where student_id = old.id;
     new.last_synced_at := null;
   end if;
   return new;
@@ -300,6 +301,83 @@ begin
      order by m.activity_date desc, m.id desc;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Consistency milestones: public announcements when a contributor's streak
+-- (consecutive IST days with activity) reaches 5, 7, 14, … 365 days.
+-- Generated here in the database whenever a day's activity is recorded (hourly
+-- sync, manual refresh, private-repo entry), so it works for every path.
+-- Each milestone is announced once per streak.
+-- Keep the list in sync with MILESTONES in js/stats.js.
+-- ---------------------------------------------------------------------
+create or replace function public.rkc_milestones()
+returns integer[] language sql immutable as $$
+  select array[5, 7, 14, 21, 30, 50, 75, 100, 150, 200, 365]
+$$;
+
+create table if not exists public.milestone_announcements (
+  id             bigint  generated always as identity primary key,
+  student_id     bigint  not null references public.students (id) on delete cascade,
+  milestone_days integer not null check (milestone_days > 0),
+  streak_start   date    not null,   -- first day of the streak that reached it
+  achieved_on    date    not null,   -- the IST day the streak reached milestone_days
+  created_at     timestamptz not null default now(),
+  constraint milestone_announcements_once unique (student_id, milestone_days, streak_start)
+);
+
+create index if not exists milestone_announcements_recent_idx
+  on public.milestone_announcements (achieved_on desc, id desc);
+
+-- Store announcements for every milestone reached by any of the contributor's streaks
+-- that isn't announced yet. A milestone already announced inside the same streak
+-- (e.g. before two streaks were joined by a late-synced day) isn't repeated.
+create or replace function public.rkc_refresh_milestones(p_student bigint)
+returns integer language plpgsql security definer
+set search_path = public
+as $$
+declare n integer;
+begin
+  with days as (
+    select activity_date as d from public.daily_activity
+     where student_id = p_student and commit_count > 0
+  ), runs as (
+    select min(d) as s, max(d) as e
+      from (select d, d - (row_number() over (order by d))::int as grp from days) x
+     group by grp
+  )
+  insert into public.milestone_announcements (student_id, milestone_days, streak_start, achieved_on)
+  select p_student, m, r.s, r.s + (m - 1)
+    from runs r
+    cross join unnest(public.rkc_milestones()) as m
+   where r.e - r.s + 1 >= m
+     and not exists (
+       select 1 from public.milestone_announcements a
+        where a.student_id = p_student and a.milestone_days = m
+          and a.achieved_on between r.s and r.e)
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Runs at the END of the transaction that added a day, so a sync that stores many days
+-- at once (e.g. a new contributor's history) is evaluated on the complete data and gets
+-- the right achieved_on dates.
+create or replace function public.rkc_daily_activity_milestones()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if exists (select 1 from public.students where id = new.student_id) then
+    perform public.rkc_refresh_milestones(new.student_id);
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists daily_activity_milestones on public.daily_activity;
+create constraint trigger daily_activity_milestones
+  after insert on public.daily_activity
+  deferrable initially deferred
+  for each row execute function public.rkc_daily_activity_milestones();
+
 -- Maintenance: rebuild daily_activity from commits + private-repo entries (e.g. after changing
 -- rkc_timezone()). Admin only.  Usage:  select public.rkc_rebuild_daily_activity();
 create or replace function public.rkc_rebuild_daily_activity()
@@ -341,6 +419,7 @@ alter table public.students       enable row level security;
 alter table public.commits        enable row level security;
 alter table public.daily_activity enable row level security;
 alter table public.manual_contributions enable row level security;
+alter table public.milestone_announcements enable row level security;
 
 -- Table privileges (defence in depth on top of RLS)
 revoke all on public.admins, public.students, public.commits, public.daily_activity from anon, authenticated;
@@ -353,6 +432,12 @@ revoke all on function public.rkc_rebuild_daily_activity() from public, anon;
 grant execute on function public.rkc_rebuild_daily_activity() to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.rkc_tracking_start() to anon, authenticated;
+
+-- milestone_announcements: public read; written only by the database itself.
+revoke all on public.milestone_announcements from anon, authenticated;
+grant select on public.milestone_announcements to anon, authenticated;
+grant execute on function public.rkc_milestones() to anon, authenticated;
+revoke all on function public.rkc_refresh_milestones(bigint) from public, anon, authenticated;
 
 -- manual_contributions: everyone sees that private work exists (date, count);
 -- only admins see which repository and the note (via rkc_admin_manual_contributions()).
@@ -369,7 +454,7 @@ revoke all on function public.rkc_refresh_day(bigint, date) from public, anon, a
 -- (scripts/sync.js / GitHub Actions). It bypasses RLS but still needs table
 -- privileges, which newer Supabase projects no longer grant automatically.
 grant usage on schema public to service_role;
-grant select, insert, update, delete on public.students, public.commits, public.daily_activity, public.admins, public.manual_contributions to service_role;
+grant select, insert, update, delete on public.students, public.commits, public.daily_activity, public.admins, public.manual_contributions, public.milestone_announcements to service_role;
 grant execute on function public.rkc_tracking_start(), public.is_admin(), public.rkc_rebuild_daily_activity() to service_role;
 
 -- admins
@@ -412,6 +497,11 @@ drop policy if exists "daily_activity: public read" on public.daily_activity;
 create policy "daily_activity: public read" on public.daily_activity
   for select to anon, authenticated using (true);
 
+-- milestone_announcements
+drop policy if exists "milestone_announcements: public read" on public.milestone_announcements;
+create policy "milestone_announcements: public read" on public.milestone_announcements
+  for select to anon, authenticated using (true);
+
 -- manual_contributions
 drop policy if exists "manual_contributions: public read" on public.manual_contributions;
 create policy "manual_contributions: public read" on public.manual_contributions
@@ -436,3 +526,6 @@ create policy "manual_contributions: admin delete" on public.manual_contribution
 -- ---------------------------------------------------------------------
 delete from public.commits where commit_date < public.rkc_tracking_start();
 delete from public.manual_contributions where activity_date < public.rkc_tracking_start();
+
+-- Announce milestones already reached in existing data (safe to re-run: nothing is repeated).
+select public.rkc_refresh_milestones(id) from public.students;

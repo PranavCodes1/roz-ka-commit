@@ -259,3 +259,60 @@ test('private repo contributions: points per day combine with GitHub commits; de
   assert.equal((await admin.from('students').delete().eq('id', s.id)).error, null);
   assert.equal((await activityOf(s.id)).length, 0);
 });
+
+// ---------- consistency milestone announcements ----------
+const announcementsOf = async (id) =>
+  (await anon.from('milestone_announcements').select('milestone_days, streak_start, achieved_on').eq('student_id', id)
+    .order('achieved_on').order('milestone_days')).data.map((a) => [a.milestone_days, a.streak_start, a.achieved_on]);
+const enoughForMilestones = () => S && addDays(S, 20) <= new Date().toISOString().slice(0, 10);
+const daysCommits = (s, base, offsets) => offsets.map((o, i) => commit(s, base + i, at(o, '05:00:00')));
+
+test('milestones: a bulk sync announces each milestone once, with the right dates', async (t) => {
+  if (!enoughForMilestones()) return t.skip(`tracking start ${S} is too recent for this test`);
+  const s = await addStudent('-ms1');
+  // 8 consecutive days stored in ONE request, newest first (like a sync of a new contributor)
+  const rows = daysCommits(s, 3000, [7, 6, 5, 4, 3, 2, 1, 0]);
+  assert.equal((await admin.from('commits').upsert(rows, { onConflict: 'student_id,sha', ignoreDuplicates: true })).error, null);
+  assert.deepEqual(await announcementsOf(s.id), [[5, S, addDays(S, 4)], [7, S, addDays(S, 6)]]);
+
+  // re-syncing, a second commit on a day, and a full rebuild don't repeat anything
+  await admin.from('commits').upsert(rows, { onConflict: 'student_id,sha', ignoreDuplicates: true });
+  await admin.from('commits').insert(commit(s, 3100, at(7, '08:00:00')));
+  assert.equal((await admin.rpc('rkc_rebuild_daily_activity')).error, null);
+  assert.equal((await announcementsOf(s.id)).length, 2);
+});
+
+test('milestones: a new streak after a break is a new achievement; joined streaks are not re-announced', async (t) => {
+  if (!enoughForMilestones()) return t.skip(`tracking start ${S} is too recent for this test`);
+  const s = await addStudent('-ms2');
+  // streak A: days 0-3 (4 days, no milestone); streak B: days 5-9 (5 days -> 🔥)
+  await admin.from('commits').insert(daysCommits(s, 4000, [0, 1, 2, 3]));
+  await admin.from('commits').insert(daysCommits(s, 4100, [5, 6, 7, 8, 9]));
+  assert.deepEqual(await announcementsOf(s.id), [[5, addDays(S, 5), addDays(S, 9)]]);
+  // a late-synced commit on day 4 joins them into one 10-day streak: 7 is new, 5 isn't repeated
+  await admin.from('commits').insert(commit(s, 4200, at(4, '05:00:00')));
+  assert.deepEqual(await announcementsOf(s.id), [[7, S, addDays(S, 6)], [5, addDays(S, 5), addDays(S, 9)]]);
+  // break on days 10-11, then a new 5-day streak (12-16): announced again as a new achievement
+  await admin.from('commits').insert(daysCommits(s, 4300, [12, 13, 14, 15, 16]));
+  const all = await announcementsOf(s.id);
+  assert.deepEqual(all.at(-1), [5, addDays(S, 12), addDays(S, 16)]);
+  assert.equal(all.length, 3);
+});
+
+test('milestones: private-repo work counts; visitors can read but nobody can write; username change clears them', async (t) => {
+  if (!enoughForMilestones()) return t.skip(`tracking start ${S} is too recent for this test`);
+  const s = await addStudent('-ms3');
+  await admin.from('commits').insert(daysCommits(s, 5000, [0, 1, 2, 3])); // 4 public days
+  await admin.from('manual_contributions').insert({ student_id: s.id, activity_date: addDays(S, 4), commit_count: 1, repo_url: 'https://github.com/x/private-ms' });
+  assert.deepEqual(await announcementsOf(s.id), [[5, S, addDays(S, 4)]]);
+
+  const fake = { student_id: s.id, milestone_days: 365, streak_start: S, achieved_on: S };
+  assert.ok((await anon.from('milestone_announcements').insert(fake)).error);
+  assert.ok((await admin.from('milestone_announcements').insert(fake)).error);
+  assert.ok((await admin.from('milestone_announcements').delete().eq('student_id', s.id)).error, 'admins cannot delete announcements via the API');
+  assert.equal((await announcementsOf(s.id)).length, 1);
+  assert.deepEqual((await anon.rpc('rkc_milestones')).data, [5, 7, 14, 21, 30, 50, 75, 100, 150, 200, 365]);
+
+  await admin.from('students').update({ github_username: `rkc-${tag}-ms3b` }).eq('id', s.id);
+  assert.equal((await announcementsOf(s.id)).length, 0);
+});

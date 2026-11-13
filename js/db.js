@@ -58,6 +58,17 @@ export const loadActivity = () =>
     .select('student_id, activity_date, commit_count, points')
     .order('activity_date').order('student_id'));
 
+/** Recent milestone announcements, newest first. Empty if the table doesn't exist yet (older schema). */
+export async function loadMilestoneAnnouncements(limit = 50) {
+  const { data, error } = await supabase.from('milestone_announcements')
+    .select('id, student_id, milestone_days, achieved_on, created_at')
+    .order('achieved_on', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return data;
+}
+
 /** Which contributors have verified private-repo work on which days (public columns only). */
 export async function loadAllPrivateDays() {
   const { data, error } = await supabase.from('manual_contributions').select('student_id, activity_date');

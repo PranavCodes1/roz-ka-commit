@@ -107,6 +107,34 @@ export function consistentContributors(rows, minDays = CONSISTENT_MIN_DAYS) {
     .sort((a, b) => b.currentStreak - a.currentStreak || a.student.name.localeCompare(b.student.name));
 }
 
+/**
+ * Consistency milestones (consecutive IST days with activity). Keep the day counts in
+ * sync with rkc_milestones() in supabase/schema.sql, which stores the announcements.
+ */
+export const MILESTONES = [
+  { days: 5, emoji: '🔥', name: 'On Fire', note: 'Building a habit' },
+  { days: 7, emoji: '⚡', name: 'Week Warrior', note: 'One full week' },
+  { days: 14, emoji: '💪', name: 'Dedicated Coder', note: 'Two weeks of consistency' },
+  { days: 21, emoji: '🏆', name: 'Habit Builder', note: 'Three weeks of consistency' },
+  { days: 30, emoji: '💎', name: 'Monthly Champion', note: 'One month of consistency' },
+  { days: 50, emoji: '🚀', name: 'Code Explorer', note: '50-day milestone' },
+  { days: 75, emoji: '🌟', name: 'Code Enthusiast', note: '75-day milestone' },
+  { days: 100, emoji: '👑', name: 'Century Coder', note: '100-day milestone' },
+  { days: 150, emoji: '🥇', name: 'Elite Coder', note: '150-day milestone' },
+  { days: 200, emoji: '🛡️', name: 'Code Guardian', note: '200-day milestone' },
+  { days: 365, emoji: '🏅', name: 'Year-Round Coder', note: 'One full year' },
+];
+
+/** The highest milestone reached by a streak of `days` consecutive days, or null. */
+export function milestoneFor(days) {
+  let found = null;
+  for (const m of MILESTONES) if (days >= m.days) found = m;
+  return found;
+}
+
+/** The milestone with exactly `days` days (for stored announcements), or null. */
+export const milestoneByDays = (days) => MILESTONES.find((m) => m.days === days) || null;
+
 /** Comeback rules: a break of at least `minGap` days with no commits, then commits again on at least `minStreak` day(s) in a row. */
 export const COMEBACK = { minGap: 2, minStreak: 1 };
 

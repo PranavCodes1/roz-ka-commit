@@ -84,6 +84,15 @@
             10 points per day with at least one commit (not per commit), counting since <span id="startFoot">…</span>.
           </div>
         </div>
+
+        <!-- Recent milestone achievements (hidden until there is one) -->
+        <div class="card mt-4 d-none" id="milestonesCard">
+          <div class="card-header section-head">
+            <h2 class="section-title">Recent milestone achievements</h2>
+            <span class="section-meta">Consecutive days of contributions</span>
+          </div>
+          <div class="card-body p-0" id="milestones"></div>
+        </div>
       </section>
 
       <!-- Consistency + period summary -->
@@ -144,6 +153,22 @@
       <span>Roz Ka Commit</span>
     </div>
   </footer>
+
+  <!-- Milestone announcements: one modal listing everything new since this visitor's last visit -->
+  <div class="modal fade" id="announceModal" tabindex="-1" aria-hidden="true" aria-labelledby="announceTitle">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="announceTitle">New consistency milestones</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="announceBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Contributor detail -->
   <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">

@@ -243,6 +243,13 @@ body {
 .tag-comeback { color: var(--app-accent-text); border-color: color-mix(in srgb, var(--app-accent) 45%, var(--app-border)); }
 
 
+/* milestone badge chip, e.g. "🔥 On Fire" */
+.milestone-badge {
+  display: inline-block; vertical-align: 1px; white-space: nowrap;
+  padding: 0 0.45rem; border-radius: 999px; font-size: 0.7rem; font-weight: 500; line-height: 1.6;
+  background: var(--app-accent-soft); color: var(--app-accent-text);
+}
+
 /* ---------- consistency bar ---------- */
 .consistency-bar { height: 6px; --bs-progress-bg: var(--app-subtle); }
 .consistency-bar .progress-bar { background: var(--app-accent); }

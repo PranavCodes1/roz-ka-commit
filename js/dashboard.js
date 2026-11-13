@@ -1,11 +1,11 @@
 // Public dashboard + leaderboard. Read-only: works for any visitor.
 import { CONFIG } from './config.js';
-import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays } from './db.js';
+import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays, loadMilestoneAnnouncements } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, consistentContributors, comebackChamps, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
+import { buildLeaderboard, consistentContributors, comebackChamps, milestoneFor, milestoneByDays, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
-const state = { students: [], activity: [], privateRows: [], filter: 'all', unit: 'week', chart: null, loaded: false };
+const state = { students: [], activity: [], privateRows: [], announcements: [], filter: 'all', unit: 'week', chart: null, loaded: false };
 const today = () => todayIn(CONFIG.TIMEZONE);
 
 $('#tzName').textContent = CONFIG.TIMEZONE;
@@ -22,8 +22,9 @@ async function load() {
   }
   $('#pageAlert').innerHTML = '';
   try {
-    const [students, activity, start, privateRows] = await Promise.all([loadStudents(), loadActivity(), loadTrackingStart(), loadAllPrivateDays()]);
+    const [students, activity, start, privateRows, announcements] = await Promise.all([loadStudents(), loadActivity(), loadTrackingStart(), loadAllPrivateDays(), loadMilestoneAnnouncements()]);
     state.privateRows = privateRows;
+    state.announcements = announcements;
     const startText = start ? formatDay(start) : '—';
     $('#startChip').textContent = startText;
     $('#startFoot').textContent = startText;
@@ -59,6 +60,8 @@ function render() {
   renderPeriodSummary(t);
   renderCalendar(t);
   renderChart(t);
+  renderMilestones();
+  announceNewMilestones(t);
 }
 
 function renderLeaderboard(t) {
@@ -94,6 +97,7 @@ function renderLeaderboard(t) {
             <div class="fw-semibold text-truncate">${esc(r.student.name)}
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
               ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Committed ${r.currentStreak} days in a row">Consistent</span>` : ''}
+              ${badge(milestoneFor(r.currentStreak))}
               ${champIds.has(r.student.id) ? '<span class="tag-consistent tag-comeback ms-1" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
@@ -135,7 +139,7 @@ function renderLeaderboard(t) {
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
-            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
+            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)} ${badge(milestoneFor(r.currentStreak))}</span>
               <span class="small text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="text-body-secondary">days in a row</span></span></div>
             <div class="d-flex align-items-center gap-2 mt-1">
               <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.activeLast30}" aria-valuemin="0" aria-valuemax="30">
@@ -251,6 +255,12 @@ async function openStudent(id) {
   $('#studentModalBody').innerHTML = `
     <p class="mb-3"><a href="${ghUrl(s.github_username)}" target="_blank" rel="noopener" class="font-monospace">github.com/${esc(s.github_username)}</a>
       <span class="small text-body-secondary ms-2">synced ${relativeTime(s.last_synced_at)}</span></p>
+    ${(() => {
+      const now = milestoneFor(streaks.current);
+      const best = milestoneFor(streaks.best);
+      if (!best) return '';
+      return `<p class="mb-3 small">${now ? `Current milestone ${badge(now)}` : ''}${now && best.days > now.days ? ' · ' : ''}${!now || best.days > now.days ? `Best milestone reached ${badge(best)}` : ''}</p>`;
+    })()}
     <div class="row g-2 mb-3 text-center">
       ${[['Total points', total], ['Commits', commits], ['Active days', rows.length], ['Current streak', `${streaks.current}d`], ['Best streak', `${streaks.best}d`]]
         .map(([k, v]) => `<div class="col-4 col-sm"><div class="metric"><b>${v}</b><span>${k}</span></div></div>`).join('')}
@@ -295,6 +305,63 @@ async function openStudent(id) {
   }
 }
 
+// ---------- consistency milestones ----------
+/** Small chip like "🔥 On Fire" (title shows the requirement). */
+function badge(m) {
+  return m ? `<span class="milestone-badge ms-1" title="${m.days}+ consecutive days: ${esc(m.note)}">${m.emoji} ${esc(m.name)}</span>` : '';
+}
+
+const studentById = (id) => state.students.find((s) => s.id === id);
+
+/** One line of an announcement: avatar, name, badge, days. Neutral wording (it's public). */
+function announcementItem(a) {
+  const s = studentById(a.student_id);
+  const m = milestoneByDays(a.milestone_days);
+  if (!s || !m) return '';
+  return `<li class="d-flex align-items-center gap-2">
+      ${avatar(s, 32)}
+      <div class="flex-grow-1 min-w-0">
+        <div class="text-truncate"><span class="fw-semibold">${esc(s.name)}</span> reached <span class="milestone-badge">${m.emoji} ${esc(m.name)}</span></div>
+        <div class="small text-body-secondary">${m.days} consecutive days of contributions · ${esc(formatDay(a.achieved_on))}</div>
+      </div>
+    </li>`;
+}
+
+function renderMilestones() {
+  const items = state.announcements.slice(0, 10).map(announcementItem).filter(Boolean);
+  $('#milestonesCard').classList.toggle('d-none', items.length === 0);
+  $('#milestones').innerHTML = `<ul class="list-unstyled mb-0 p-3 d-flex flex-column gap-3">${items.join('')}</ul>`;
+}
+
+// Which announcements this browser has already shown (no logins, so "announced" is per visitor).
+const SEEN_KEY = 'rkc-seen-milestones';
+function readSeen() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
+}
+function markSeen(ids) {
+  try {
+    const seen = [...readSeen(), ...ids];
+    localStorage.setItem(SEEN_KEY, JSON.stringify(seen.slice(-500)));
+  } catch { /* storage unavailable: the modal may show again next visit */ }
+}
+
+/**
+ * One modal listing every milestone unlocked in the last 7 days that this visitor hasn't
+ * seen yet. Nothing new -> no modal. Achievements stay in the database, so visitors who
+ * come later still see them.
+ */
+function announceNewMilestones(t) {
+  const since = addDays(t, -6);
+  const seen = readSeen();
+  const fresh = state.announcements.filter((a) => a.achieved_on >= since && !seen.has(a.id) && studentById(a.student_id) && milestoneByDays(a.milestone_days));
+  const modalEl = $('#announceModal');
+  if (!fresh.length || modalEl.classList.contains('show') || $('#studentModal').classList.contains('show')) return;
+  $('#announceTitle').textContent = fresh.length === 1 ? 'New consistency milestone' : `${fresh.length} new consistency milestones`;
+  $('#announceBody').innerHTML = `<ul class="list-unstyled mb-0 d-flex flex-column gap-3">${fresh.map(announcementItem).join('')}</ul>`;
+  markSeen(fresh.map((a) => a.id));
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
 // Wire up controls
 $('#filterGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-filter]');
@@ -323,4 +390,10 @@ if (configError) {
   load();
   // If the page stays open past midnight IST, reload so "today" (tags, streaks, today's numbers) moves on.
   setInterval(() => { if (state.loaded && today() !== renderedDay) load(); }, 60_000);
+  // Pick up milestones unlocked by the hourly sync while the page stays open.
+  setInterval(async () => {
+    if (!state.loaded || loading) return;
+    const latest = await loadMilestoneAnnouncements();
+    if (latest.some((a) => !state.announcements.some((b) => b.id === a.id))) load();
+  }, 5 * 60_000);
 }
