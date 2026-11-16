@@ -209,7 +209,7 @@ function cssVar(name) {
 }
 
 function renderChart(t) {
-  const series = periodSeries(state.activity, t, state.unit, 12);
+  const series = periodSeries(state.activity, t, state.unit, state.unit === 'day' ? 14 : 12);
   const hasData = series.some((b) => b.commits > 0);
   $('#chartState').innerHTML = hasData ? '' : emptyHtml('No commits recorded in this range yet.', 'bi-bar-chart');
   $('#chart').parentElement.classList.toggle('d-none', !hasData);

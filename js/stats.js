@@ -189,7 +189,12 @@ export function todaySummary(students, activity, today) {
  */
 export function periodSeries(activity, today, unit, count = 12) {
   const buckets = [];
-  if (unit === 'week') {
+  if (unit === 'day') {
+    for (let i = count - 1; i >= 0; i--) {
+      const start = addDays(today, -i);
+      buckets.push({ start, end: start, label: formatDay(start, { day: 'numeric', month: 'short' }) });
+    }
+  } else if (unit === 'week') {
     const thisWeek = startOfWeek(today);
     for (let i = count - 1; i >= 0; i--) {
       const start = addDays(thisWeek, -7 * i);
