@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { configError, loadStudents, loadActivity, loadRecentCommits, loadTrackingStart, loadPrivateContributions, loadAllPrivateDays, loadMilestoneAnnouncements } from './db.js';
 import { todayIn, addDays, formatDay, startOfWeek, startOfMonth } from './dates.js';
-import { buildLeaderboard, consistentContributors, comebackChamps, milestoneFor, milestoneByDays, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
+import { buildLeaderboard, consistentContributors, comebackChamps, milestoneFor, milestoneByDays, MILESTONES, CONSISTENT_MIN_DAYS, todaySummary, periodSeries, calendarValues, computeStreaks, periodRange, FILTERS } from './stats.js';
 import { $, esc, avatar, ghUrl, loadingHtml, emptyHtml, errorHtml, relativeTime, errMsg, calendarHtml } from './ui.js';
 
 const state = { students: [], activity: [], privateRows: [], announcements: [], filter: 'all', unit: 'week', chart: null, loaded: false };
@@ -61,6 +61,7 @@ function render() {
   renderCalendar(t);
   renderChart(t);
   renderMilestones();
+  renderMilestoneGuide();
   announceNewMilestones(t);
 }
 
@@ -94,11 +95,12 @@ function renderLeaderboard(t) {
         <div class="d-flex align-items-center gap-2">
           ${avatar(r.student)}
           <div class="min-w-0">
-            <div class="fw-semibold text-truncate">${esc(r.student.name)}
+            <div class="fw-semibold d-flex align-items-center flex-wrap gap-1">
+              <span class="text-truncate min-w-0">${esc(r.student.name)}</span>
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
-              ${topIds.has(r.student.id) ? `<span class="tag-consistent ms-1" title="Committed ${r.currentStreak} days in a row">Consistent</span>` : ''}
-              ${badge(milestoneFor(r.currentStreak))}
-              ${champIds.has(r.student.id) ? '<span class="tag-consistent tag-comeback ms-1" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent" title="Committed ${r.currentStreak} days in a row">Consistent</span>` : ''}
+              ${badge(milestoneFor(r.bestStreak))}
+              ${champIds.has(r.student.id) ? '<span class="tag-consistent" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
           </div>
@@ -139,7 +141,7 @@ function renderLeaderboard(t) {
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
-            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)} ${badge(milestoneFor(r.currentStreak))}</span>
+            <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
               <span class="small text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="text-body-secondary">days in a row</span></span></div>
             <div class="d-flex align-items-center gap-2 mt-1">
               <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.activeLast30}" aria-valuemin="0" aria-valuemax="30">
@@ -256,10 +258,12 @@ async function openStudent(id) {
     <p class="mb-3"><a href="${ghUrl(s.github_username)}" target="_blank" rel="noopener" class="font-monospace">github.com/${esc(s.github_username)}</a>
       <span class="small text-body-secondary ms-2">synced ${relativeTime(s.last_synced_at)}</span></p>
     ${(() => {
-      const now = milestoneFor(streaks.current);
-      const best = milestoneFor(streaks.best);
-      if (!best) return '';
-      return `<p class="mb-3 small">${now ? `Current milestone ${badge(now)}` : ''}${now && best.days > now.days ? ' · ' : ''}${!now || best.days > now.days ? `Best milestone reached ${badge(best)}` : ''}</p>`;
+      const achieved = MILESTONES.filter((m) => streaks.best >= m.days);
+      if (!achieved.length) return `<p class="mb-3 small text-body-secondary">No consistency milestones yet. The first milestone is reached at ${MILESTONES[0].days} consecutive active days.</p>`;
+      const current = achieved.at(-1);
+      return `<div class="mb-3"><div class="small fw-semibold mb-2">Current milestone ${badge(current)}</div>
+        <div class="small text-body-secondary mb-1">All milestones achieved</div>
+        <div class="d-flex flex-wrap gap-2">${achieved.map((m) => badge(m)).join('')}</div></div>`;
     })()}
     <div class="row g-2 mb-3 text-center">
       ${[['Total points', total], ['Commits', commits], ['Active days', rows.length], ['Current streak', `${streaks.current}d`], ['Best streak', `${streaks.best}d`]]
@@ -309,6 +313,13 @@ async function openStudent(id) {
 /** Small chip like "🔥 On Fire" (title shows the requirement). */
 function badge(m) {
   return m ? `<span class="milestone-badge ms-1" title="${m.days}+ consecutive days: ${esc(m.note)}">${m.emoji} ${esc(m.name)}</span>` : '';
+}
+
+function renderMilestoneGuide() {
+  $('#milestoneGuide').innerHTML = `<ul class="list-unstyled mb-0 d-flex flex-column gap-2">${MILESTONES.map((m) => `
+    <li class="d-flex align-items-center justify-content-between gap-2">
+      ${badge(m)}<span class="small text-body-secondary text-end">${m.days}+ consecutive days</span>
+    </li>`).join('')}</ul>`;
 }
 
 const studentById = (id) => state.students.find((s) => s.id === id);
