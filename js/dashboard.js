@@ -107,10 +107,10 @@ function renderLeaderboard(t) {
         </div>
       </td>
       <td class="text-end num pts">${r.points}</td>
-      <td class="text-end num d-none d-sm-table-cell">${r.commits}</td>
-      <td class="text-end num d-none d-md-table-cell">${r.activeDays}</td>
+      <td class="text-end num">${r.commits}</td>
+      <td class="text-end num">${r.activeDays}</td>
       <td class="text-end num">${r.currentStreak ? `${r.currentStreak}<span class="unit">d</span>` : '–'}</td>
-      <td class="text-end num d-none d-md-table-cell">${r.bestStreak ? `${r.bestStreak}<span class="unit">d</span>` : '–'}</td>
+      <td class="text-end num">${r.bestStreak ? `${r.bestStreak}<span class="unit">d</span>` : '–'}</td>
     </tr>`).join('');
 
   el.innerHTML = `
@@ -119,10 +119,10 @@ function renderLeaderboard(t) {
         <thead><tr>
           <th class="text-center">#</th><th>Contributor</th>
           <th class="text-end">Points</th>
-          <th class="text-end d-none d-sm-table-cell">Commits</th>
-          <th class="text-end d-none d-md-table-cell">Active days</th>
+          <th class="text-end">Commits</th>
+          <th class="text-end">Active days</th>
           <th class="text-end" title="Consecutive days (IST) with at least one commit">Streak</th>
-          <th class="text-end d-none d-md-table-cell">Best</th>
+          <th class="text-end">Best</th>
         </tr></thead>
         <tbody>${body}</tbody>
       </table>
