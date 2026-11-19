@@ -182,6 +182,12 @@ body {
 .section-title { font-size: 0.95rem; font-weight: 600; margin: 0; }
 .section-meta { color: var(--app-muted); font-size: 0.78rem; }
 .section-foot { background: var(--app-subtle); color: var(--app-muted); font-size: 0.78rem; border-top-color: var(--app-border); }
+.consistency-note {
+  display: flex; align-items: flex-start; gap: 0.65rem;
+  padding: 0.7rem 0.8rem; border-left: 3px solid var(--app-accent); border-radius: 6px;
+  background: var(--app-accent-soft); color: var(--app-text); font-size: 0.82rem;
+}
+.consistency-note i { color: var(--app-accent-text); margin-top: 0.12rem; }
 .subhead { font-size: 0.85rem; font-weight: 600; margin: 0 0 0.6rem; }
 
 /* ---------- stat cards ---------- */
