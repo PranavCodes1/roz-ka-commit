@@ -93,8 +93,8 @@ Reaching these numbers of **consecutive days** (the same streak as Consistent) e
 | 200 | 🛡️ Code Guardian | 200-day milestone |
 | 365 | 🏅 Year-Round Coder | One full year |
 
-- The badge for the **current** streak shows next to the name in the leaderboard and in **Most consistent**. It lasts
-  as long as the streak (all day until 11:59 PM IST) and goes when the streak breaks.
+- The highest milestone badge ever reached shows next to the name in the leaderboard and stays visible after a streak
+  breaks. The **Consistent** tag is separate: it requires a current streak of 3+ days and goes when that streak breaks.
 - Contributor details also show the **best milestone ever reached**.
 - The list is `MILESTONES` in `js/stats.js` and `rkc_milestones()` in `supabase/schema.sql`. Keep them identical
   (a test checks this).
@@ -107,8 +107,8 @@ contributor logins.
   entry), the database checks that contributor's streaks and stores an announcement for each newly reached milestone
   (table `milestone_announcements`). The check runs once all of a sync's commits are saved, so back-dated history gets
   the right dates.
-- **Announced once per achievement:** each milestone is announced once per streak. Reaching it again in a new streak
-  after a break is a new achievement.
+- **Announced once per contributor:** each milestone (such as 5-day On Fire) is recorded only the first time that
+  contributor reaches it. Later streaks do not repeat it; the next announcement is for the next milestone reached.
 - **One modal:** visitors see a single modal listing every milestone from the **last 7 days** that their browser hasn't
   shown before, however many contributors are in it. No new milestones means no modal. The browser remembers what it
   has shown, so each visitor sees each announcement once.

@@ -306,7 +306,7 @@ end $$;
 -- (consecutive IST days with activity) reaches 5, 7, 14, … 365 days.
 -- Generated here in the database whenever a day's activity is recorded (hourly
 -- sync, manual refresh, private-repo entry), so it works for every path.
--- Each milestone is announced once per streak.
+-- Each milestone is announced once per contributor, preserving its first date.
 -- Keep the list in sync with MILESTONES in js/stats.js.
 -- ---------------------------------------------------------------------
 create or replace function public.rkc_milestones()
@@ -320,16 +320,30 @@ create table if not exists public.milestone_announcements (
   milestone_days integer not null check (milestone_days > 0),
   streak_start   date    not null,   -- first day of the streak that reached it
   achieved_on    date    not null,   -- the IST day the streak reached milestone_days
-  created_at     timestamptz not null default now(),
-  constraint milestone_announcements_once unique (student_id, milestone_days, streak_start)
+  created_at     timestamptz not null default now()
 );
 
 create index if not exists milestone_announcements_recent_idx
   on public.milestone_announcements (achieved_on desc, id desc);
 
--- Store announcements for every milestone reached by any of the contributor's streaks
--- that isn't announced yet. A milestone already announced inside the same streak
--- (e.g. before two streaks were joined by a late-synced day) isn't repeated.
+-- Migrate older per-streak announcements to one row per contributor/milestone,
+-- retaining the first achieved date, then enforce the lifetime uniqueness rule.
+with ranked as (
+  select id, row_number() over (
+    partition by student_id, milestone_days order by achieved_on, id
+  ) as position
+  from public.milestone_announcements
+)
+delete from public.milestone_announcements a
+ using ranked r
+ where a.id = r.id and r.position > 1;
+
+alter table public.milestone_announcements
+  drop constraint if exists milestone_announcements_once;
+create unique index if not exists milestone_announcements_once_per_student_idx
+  on public.milestone_announcements (student_id, milestone_days);
+
+-- Store the earliest qualifying streak for each milestone not already achieved.
 create or replace function public.rkc_refresh_milestones(p_student bigint)
 returns integer language plpgsql security definer
 set search_path = public
@@ -343,16 +357,19 @@ begin
     select min(d) as s, max(d) as e
       from (select d, d - (row_number() over (order by d))::int as grp from days) x
      group by grp
+  ), earliest as (
+    select distinct on (m) m, r.s as streak_start, r.s + (m - 1) as achieved_on
+      from runs r
+      cross join unnest(public.rkc_milestones()) as m
+     where r.e - r.s + 1 >= m
+     order by m, r.s
   )
   insert into public.milestone_announcements (student_id, milestone_days, streak_start, achieved_on)
-  select p_student, m, r.s, r.s + (m - 1)
-    from runs r
-    cross join unnest(public.rkc_milestones()) as m
-   where r.e - r.s + 1 >= m
-     and not exists (
+  select p_student, e.m, e.streak_start, e.achieved_on
+    from earliest e
+   where not exists (
        select 1 from public.milestone_announcements a
-        where a.student_id = p_student and a.milestone_days = m
-          and a.achieved_on between r.s and r.e)
+        where a.student_id = p_student and a.milestone_days = e.m)
   on conflict do nothing;
   get diagnostics n = row_count;
   return n;

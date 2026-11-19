@@ -282,7 +282,7 @@ test('milestones: a bulk sync announces each milestone once, with the right date
   assert.equal((await announcementsOf(s.id)).length, 2);
 });
 
-test('milestones: a new streak after a break is a new achievement; joined streaks are not re-announced', async (t) => {
+test('milestones: each contributor earns each milestone once; joined streaks keep the first date', async (t) => {
   if (!enoughForMilestones()) return t.skip(`tracking start ${S} is too recent for this test`);
   const s = await addStudent('-ms2');
   // streak A: days 0-3 (4 days, no milestone); streak B: days 5-9 (5 days -> 🔥)
@@ -292,11 +292,11 @@ test('milestones: a new streak after a break is a new achievement; joined streak
   // a late-synced commit on day 4 joins them into one 10-day streak: 7 is new, 5 isn't repeated
   await admin.from('commits').insert(commit(s, 4200, at(4, '05:00:00')));
   assert.deepEqual(await announcementsOf(s.id), [[7, S, addDays(S, 6)], [5, addDays(S, 5), addDays(S, 9)]]);
-  // break on days 10-11, then a new 5-day streak (12-16): announced again as a new achievement
+  // break on days 10-11, then a new 5-day streak (12-16): don't repeat the 5-day milestone
   await admin.from('commits').insert(daysCommits(s, 4300, [12, 13, 14, 15, 16]));
-  const all = await announcementsOf(s.id);
-  assert.deepEqual(all.at(-1), [5, addDays(S, 12), addDays(S, 16)]);
-  assert.equal(all.length, 3);
+  assert.deepEqual(await announcementsOf(s.id), [
+    [7, S, addDays(S, 6)], [5, addDays(S, 5), addDays(S, 9)],
+  ]);
 });
 
 test('milestones: private-repo work counts; visitors can read but nobody can write; username change clears them', async (t) => {
