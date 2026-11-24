@@ -45,8 +45,9 @@ Commits from before that date are never stored, so they give no points, streaks 
   more than 10 points per day impossible. All history is kept in `daily_activity`.
 - **Ranking:** by points, using **dense ranking**: contributors with equal points share a rank and the next rank
   follows on (1, 1, 2, …). Within a tie, rows are ordered by active days, then commits, then name.
-- **Streaks:** the current streak counts consecutive days with a commit. It survives until the end of today, so a streak
-  ending yesterday still counts if you haven't committed yet today. The best streak is the longest run ever.
+- **Streaks:** current and best streaks count active days, allowing up to 3 inactive calendar days between them. Missed
+  days don't increase the count. The current streak stays alive through the grace window and the day on which a return
+  is still possible; it resets after 4 full inactive days.
 - **Recognition:** see [Consistent and Comeback champ](#consistent-and-comeback-champ) below.
 
 ## Consistent and Comeback champ
@@ -54,47 +55,50 @@ Commits from before that date are never stored, so they give no points, streaks 
 Two labels highlight contributors on the dashboard. They're only there to motivate, and never affect points.
 
 ### Consistent
-**Who gets it:** anyone who has committed **every day for at least 3 days in a row** (IST days). It's about coding every
-day, not about points: it doesn't compare contributors, and any number of people can have it at once.
+**Who gets it:** anyone with **3 or more active days in their current grace-aware streak**. It's about active days, not
+points: it doesn't compare contributors, and any number of people can have it at once.
 
-1. RKC counts each contributor's **streak**: consecutive IST days with at least one qualifying commit (or verified
-   private-repo work). It's shown in the leaderboard's **Streak** column, separately from points.
-2. With a streak of **3 or more days**, the contributor gets the **Consistent** tag.
-3. **You have the whole day.** Until **11:59 PM IST** a streak that ended yesterday is still alive, so the tag stays
-   all day, even before today's commit.
-4. **One missed day breaks it.** If a whole IST day passes without a commit, the streak resets to 0 at midnight and the
-   tag is removed. After that, 3 new consecutive days earn it back.
+1. RKC counts each IST date with at least one qualifying public commit or verified private-repo contribution as one
+   **active day**. It is shown separately from points.
+2. Active dates separated by no more than **3 inactive calendar dates** belong to the same streak. Inactive dates never
+   increase the streak count.
+3. **You have the whole day.** A contributor can return on the day after 3 full missed dates and continue the streak.
+   If a fourth full date passes without activity, the streak resets at the next IST midnight.
+4. The Consistent tag is shown at **3 active days** in the current streak. After a reset, 3 active days in a new streak
+   earn the same tag again.
 
-Where it shows: the **Most consistent** section lists everyone with the tag (longest streak first) with their
-"N days in a row", a fill-up bar of **active days in the last 30** (e.g. 5/30), and their current and best streak. The
-leaderboard shows a **Consistent** tag next to their names. The bar is for information only; the tag depends on the streak.
+Where it shows: the **Most consistent** section lists everyone with the tag (most active days in the current streak
+first), their current and best active-day streak counts, and a fill-up bar of **active days in the last 30** (e.g. 5/30).
+The leaderboard shows a **Consistent** tag next to their names. The bar is for information only; the tag depends on the
+current streak.
 
-*Example:* commits on 10, 11 and 12 Nov, so Consistent on 12 Nov, and still on 13 Nov until 11:59 PM even with no commit
-yet. A commit on 13 Nov makes it 4 days in a row. No commit on 13 Nov, so at 12:00 AM on 14 Nov the streak is 0 and the
-tag is gone; commits on 14, 15 and 16 Nov earn it back.
+*Example:* commits on 10, 11 and 12 Nov earn Consistent with 3 active days. If there are no commits on 13–15 Nov, the
+streak stays at 3 through those three grace days. A commit on 16 Nov continues it at 4 active days. If 16 Nov is also
+missed, the streak resets at 12:00 AM on 17 Nov; a new streak can earn Consistent after 3 active days.
 
 **Timing:** a sync runs every hour, including at 12:00 AM IST, so commits made just before midnight are counted for the
 right day within about a minute. The dashboard refreshes itself at midnight if it's left open.
 
 ### Milestone badges
-Reaching these numbers of **consecutive days** (the same streak as Consistent) earns a badge:
+Reaching these totals of **active calendar days** in RKC's tracked history earns a badge. Missing dates do not reset
+milestone progress, and multiple commits on one date count as one active day:
 
-| Consecutive days | Badge | Recognition |
+| Total active days | Badge | Recognition |
 |---:|---|---|
 | 5 | 🔥 On Fire | Building a habit |
-| 7 | ⚡ Week Warrior | One full week |
-| 14 | 💪 Dedicated Coder | Two weeks of consistency |
-| 21 | 🏆 Habit Builder | Three weeks of consistency |
-| 30 | 💎 Monthly Champion | One month of consistency |
-| 50 | 🚀 Code Explorer | 50-day milestone |
-| 75 | 🌟 Code Enthusiast | 75-day milestone |
-| 100 | 👑 Century Coder | 100-day milestone |
-| 150 | 🥇 Elite Coder | 150-day milestone |
-| 200 | 🛡️ Code Guardian | 200-day milestone |
-| 365 | 🏅 Year-Round Coder | One full year |
+| 7 | ⚡ Week Warrior | 7 active days |
+| 14 | 💪 Dedicated Coder | 14 active days |
+| 21 | 🏆 Habit Builder | 21 active days |
+| 30 | 💎 Monthly Champion | 30 active days |
+| 50 | 🚀 Code Explorer | 50 active days |
+| 75 | 🌟 Code Enthusiast | 75 active days |
+| 100 | 👑 Century Coder | 100 active days |
+| 150 | 🥇 Elite Coder | 150 active days |
+| 200 | 🛡️ Code Guardian | 200 active days |
+| 365 | 🏅 Year-Round Coder | 365 active days |
 
-- The highest milestone badge ever reached shows next to the name in the leaderboard and stays visible after a streak
-  breaks. The **Consistent** tag is separate: it requires a current streak of 3+ days and goes when that streak breaks.
+- The highest milestone badge reached shows next to the name in the leaderboard. Milestones do not reset with streaks.
+  The **Consistent** tag is separate: it requires 3 active days in the current grace-aware streak.
 - Contributor details also show the **best milestone ever reached**.
 - The list is `MILESTONES` in `js/stats.js` and `rkc_milestones()` in `supabase/schema.sql`. Keep them identical
   (a test checks this).
@@ -104,9 +108,9 @@ Everyone visiting the site is told when someone reaches a milestone. It's a publ
 contributor logins.
 
 - **Generated in the database:** whenever a day's activity is recorded (hourly sync, manual refresh or private-repo
-  entry), the database checks that contributor's streaks and stores an announcement for each newly reached milestone
-  (table `milestone_announcements`). The check runs once all of a sync's commits are saved, so back-dated history gets
-  the right dates.
+  entry), the database checks that contributor's total active days and stores an announcement for each newly reached
+  milestone (table `milestone_announcements`). The check runs once all of a sync's commits are saved, so back-dated
+  history gets the right dates.
 - **Announced once per contributor:** each milestone (such as 5-day On Fire) is recorded only the first time that
   contributor reaches it. Later streaks do not repeat it; the next announcement is for the next milestone reached.
 - **One modal:** visitors see a single modal listing every milestone from the **last 7 days** that their browser hasn't
@@ -120,10 +124,11 @@ contributor logins.
 **Who gets it:** someone who **comes back after a break**.
 
 1. They **had been active before**: at least one day with a commit. Brand-new contributors don't count.
-2. They took a **break of 2 or more days in a row** with no commits.
+2. They took a **break of 4 or more consecutive calendar days** with no activity, long enough for the Consistent streak
+   to reset.
 3. They **commit again**, and one day is enough. They become a **Comeback champ** that day.
-4. The label **stays while they keep committing** (today or yesterday) and **ends once they miss a whole day** again,
-   until their next comeback.
+4. The label stays while that grace-aware streak is current, including its 3-day inactivity grace. It ends when the
+   streak resets; another comeback can earn it again.
 
 Where it shows: a **Comeback champ** section listing everyone currently on a comeback (longest current run first), and
 a **Comeback champ** tag next to their names in the leaderboard. The section is **hidden when nobody qualifies**.
@@ -132,13 +137,13 @@ a **Comeback champ** tag next to their names in the leaderboard. The section is 
 
 | Activity | Comeback champ? |
 |---|---|
-| Commit Mon, nothing Tue–Wed, commit Thu | ✅ from Thursday |
-| Commit Mon, nothing Tue, commit Wed | ❌ only a 1-day break |
+| Commit Mon, nothing Tue–Fri, commit Sat | ✅ from Saturday |
+| Commit Mon, nothing Tue–Thu, commit Fri | ❌ within the 3-day grace period |
 | First ever commits on Wed and Thu | ❌ a newcomer, not a comeback |
-| Came back Thu, then nothing Fri or Sat | ❌ again from Saturday (the run ended) |
+| Came back Sat, then nothing Sun–Wed | ❌ after the grace period ends |
 
-Both thresholds can be changed in `COMEBACK` in `js/stats.js`: `minGap` (break length, now 2 days) and `minStreak`
-(days back in a row, now 1). For Consistent, `CONSISTENT_MIN_DAYS` (days in a row, now 3) is in the same file.
+The comeback threshold is in `COMEBACK` in `js/stats.js`; its minimum break follows the 3-day streak grace period.
+For Consistent, `CONSISTENT_MIN_DAYS` (active days, now 3) is in the same file.
 
 ## Project structure
 

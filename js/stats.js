@@ -22,24 +22,29 @@ export function periodRange(filter, today) {
 
 const inRange = (day, [from, to]) => (from === null || day >= from) && day <= to;
 
+/** Inactive calendar dates tolerated between active days in a streak. */
+export const STREAK_GRACE_DAYS = 3;
+
 /**
- * Streaks from a list of active days (any order, duplicates allowed).
- * The current streak stays alive until the end of today: if a student has
- * not committed yet today, a streak ending yesterday still counts.
+ * Grace-aware streaks from active dates (any order, duplicates allowed).
+ * Missing dates never increase the count. A gap of at most `graceDays` missed
+ * dates keeps active days in the same streak. The current streak stays alive
+ * through today so a contributor can still return during the grace window.
  */
-export function computeStreaks(days, today) {
+export function computeStreaks(days, today, graceDays = STREAK_GRACE_DAYS) {
   const sorted = [...new Set(days)].filter((d) => d <= today).sort();
+  const maxActiveDateGap = graceDays + 1;
   let best = 0;
   let run = 0;
   for (let i = 0; i < sorted.length; i++) {
-    run = i > 0 && diffDays(sorted[i], sorted[i - 1]) === 1 ? run + 1 : 1;
+    run = i > 0 && diffDays(sorted[i], sorted[i - 1]) <= maxActiveDateGap ? run + 1 : 1;
     if (run > best) best = run;
   }
   let current = 0;
   const last = sorted[sorted.length - 1];
-  if (last && diffDays(today, last) <= 1) {
+  if (last && diffDays(today, last) <= maxActiveDateGap) {
     current = 1;
-    for (let i = sorted.length - 1; i > 0 && diffDays(sorted[i], sorted[i - 1]) === 1; i--) current++;
+    for (let i = sorted.length - 1; i > 0 && diffDays(sorted[i], sorted[i - 1]) <= maxActiveDateGap; i--) current++;
   }
   return { current, best };
 }
@@ -65,17 +70,19 @@ export function buildLeaderboard(students, activity, filter, today) {
   const rows = students.map((s) => {
     const rowsFor = (byStudent.get(s.id) || []).filter((r) => r.activity_date <= today);
     const period = rowsFor.filter((r) => inRange(r.activity_date, range));
-    const streaks = computeStreaks(rowsFor.map((r) => r.activity_date), today);
+    const activeRows = rowsFor.filter((r) => r.commit_count > 0);
+    const streaks = computeStreaks(activeRows.map((r) => r.activity_date), today);
     return {
       student: s,
       points: sum(period, 'points'),
       commits: sum(period, 'commit_count'),
       activeDays: period.filter((r) => r.commit_count > 0).length,
       totalPoints: sum(rowsFor, 'points'),
+      totalActiveDays: new Set(activeRows.map((r) => r.activity_date)).size,
       currentStreak: streaks.current,
       bestStreak: streaks.best,
       // display only (the bar in "Most consistent"): active days in the last 30 IST days
-      activeLast30: rowsFor.filter((r) => r.activity_date >= addDays(today, -29) && r.commit_count > 0).length,
+      activeLast30: activeRows.filter((r) => r.activity_date >= addDays(today, -29)).length,
     };
   });
 
@@ -91,15 +98,14 @@ export function buildLeaderboard(students, activity, filter, today) {
   return rows;
 }
 
-/** Consecutive days (IST) with at least one qualifying commit needed for the Consistent tag. */
+/** Active days in the current grace-aware streak needed for the Consistent tag. */
 export const CONSISTENT_MIN_DAYS = 3;
 
 /**
- * Consistent contributors: everyone whose CURRENT streak of consecutive IST days with a
- * commit is at least `minDays`. It doesn't depend on points or on other contributors.
- * The current streak (computeStreaks) stays alive until the end of today, so a contributor
- * keeps the tag all day even before today's commit; at midnight IST, a day without a
- * commit resets the streak to 0 and the tag goes. Longest streak first, then name.
+ * Consistent contributors have at least `minDays` active dates in their CURRENT streak.
+ * Up to STREAK_GRACE_DAYS missed dates can fall between active dates; missed dates don't
+ * increase the count. It doesn't depend on points or other contributors. The current
+ * streak stays alive through the grace window and the current day. Longest first, then name.
  */
 export function consistentContributors(rows, minDays = CONSISTENT_MIN_DAYS) {
   return rows
@@ -108,39 +114,39 @@ export function consistentContributors(rows, minDays = CONSISTENT_MIN_DAYS) {
 }
 
 /**
- * Consistency milestones (consecutive IST days with activity). Keep the day counts in
- * sync with rkc_milestones() in supabase/schema.sql, which stores the announcements.
+ * Lifetime active-day milestones. Keep thresholds in sync with rkc_milestones() in
+ * supabase/schema.sql, which stores the announcements.
  */
 export const MILESTONES = [
   { days: 5, emoji: '🔥', name: 'On Fire', note: 'Building a habit' },
-  { days: 7, emoji: '⚡', name: 'Week Warrior', note: 'One full week' },
-  { days: 14, emoji: '💪', name: 'Dedicated Coder', note: 'Two weeks of consistency' },
-  { days: 21, emoji: '🏆', name: 'Habit Builder', note: 'Three weeks of consistency' },
-  { days: 30, emoji: '💎', name: 'Monthly Champion', note: 'One month of consistency' },
-  { days: 50, emoji: '🚀', name: 'Code Explorer', note: '50-day milestone' },
-  { days: 75, emoji: '🌟', name: 'Code Enthusiast', note: '75-day milestone' },
-  { days: 100, emoji: '👑', name: 'Century Coder', note: '100-day milestone' },
-  { days: 150, emoji: '🥇', name: 'Elite Coder', note: '150-day milestone' },
-  { days: 200, emoji: '🛡️', name: 'Code Guardian', note: '200-day milestone' },
-  { days: 365, emoji: '🏅', name: 'Year-Round Coder', note: 'One full year' },
+  { days: 7, emoji: '⚡', name: 'Week Warrior', note: 'Seven active days' },
+  { days: 14, emoji: '💪', name: 'Dedicated Coder', note: 'Fourteen active days' },
+  { days: 21, emoji: '🏆', name: 'Habit Builder', note: 'Twenty-one active days' },
+  { days: 30, emoji: '💎', name: 'Monthly Champion', note: 'Thirty active days' },
+  { days: 50, emoji: '🚀', name: 'Code Explorer', note: 'Fifty active days' },
+  { days: 75, emoji: '🌟', name: 'Code Enthusiast', note: 'Seventy-five active days' },
+  { days: 100, emoji: '👑', name: 'Century Coder', note: 'One hundred active days' },
+  { days: 150, emoji: '🥇', name: 'Elite Coder', note: 'One hundred fifty active days' },
+  { days: 200, emoji: '🛡️', name: 'Code Guardian', note: 'Two hundred active days' },
+  { days: 365, emoji: '🏅', name: 'Year-Round Coder', note: 'Three hundred sixty-five active days' },
 ];
 
-/** The highest milestone reached by a streak of `days` consecutive days, or null. */
-export function milestoneFor(days) {
+/** The highest milestone reached by `activeDays`, or null. */
+export function milestoneFor(activeDays) {
   let found = null;
-  for (const m of MILESTONES) if (days >= m.days) found = m;
+  for (const m of MILESTONES) if (activeDays >= m.days) found = m;
   return found;
 }
 
 /** The milestone with exactly `days` days (for stored announcements), or null. */
 export const milestoneByDays = (days) => MILESTONES.find((m) => m.days === days) || null;
 
-/** Comeback rules: a break of at least `minGap` days with no commits, then commits again on at least `minStreak` day(s) in a row. */
-export const COMEBACK = { minGap: 2, minStreak: 1 };
+/** A comeback requires activity to resume after the grace-aware streak has reset. */
+export const COMEBACK = { minGap: STREAK_GRACE_DAYS + 1, minStreak: 1 };
 
 /**
- * If the contributor's CURRENT streak (alive today or yesterday) is at least `minStreak`
- * days and began right after a break of at least `minGap` inactive days, following
+ * If the contributor's CURRENT grace-aware streak is at least `minStreak` active days
+ * and began right after a break of at least `minGap` inactive dates, following
  * earlier activity, return { streak, gap, since, before }. Otherwise null.
  * (Someone who has never been active before the streak is a newcomer, not a comeback.)
  */

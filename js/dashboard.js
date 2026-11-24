@@ -78,8 +78,7 @@ function renderLeaderboard(t) {
   const hasPrivate = new Set(state.privateRows
     .filter((p) => (pFrom === null || p.activity_date >= pFrom) && p.activity_date <= pTo)
     .map((p) => p.student_id));
-  // Consistent = a current streak of 3+ consecutive IST days with a commit (independent of points).
-  // The streak stays alive until 11:59 PM IST, so the tag lasts all day; a missed day breaks it at midnight.
+  // Consistent = 3+ active dates in the current grace-aware streak, independent of points.
   const top = consistentContributors(buildLeaderboard(state.students, state.activity, 'all', t));
   const topIds = new Set(top.map((r) => r.student.id));
   // Comeback champs: back on a streak after a break.
@@ -98,8 +97,8 @@ function renderLeaderboard(t) {
             <div class="fw-semibold d-flex align-items-center flex-wrap gap-1">
               <span class="text-truncate min-w-0">${esc(r.student.name)}</span>
               ${hasPrivate.has(r.student.id) ? '<i class="bi bi-lock text-body-secondary ms-1" title="Includes commits in a private repository, verified by an admin"></i>' : ''}
-              ${topIds.has(r.student.id) ? `<span class="tag-consistent" title="Committed ${r.currentStreak} days in a row">Consistent</span>` : ''}
-              ${badge(milestoneFor(r.bestStreak))}
+              ${topIds.has(r.student.id) ? `<span class="tag-consistent" title="${r.currentStreak} active days in the current streak">Consistent</span>` : ''}
+              ${badge(milestoneStatus(r.student.id, r.totalActiveDays).current)}
               ${champIds.has(r.student.id) ? '<span class="tag-consistent" title="Back on a streak after a break">Comeback champ</span>' : ''}</div>
             <a class="handle" href="${ghUrl(r.student.github_username)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">@${esc(r.student.github_username)} </a>
@@ -121,8 +120,8 @@ function renderLeaderboard(t) {
           <th class="text-end">Points</th>
           <th class="text-end">Commits</th>
           <th class="text-end">Active days</th>
-          <th class="text-end" title="Consecutive days (IST) with at least one commit">Streak</th>
-          <th class="text-end">Best</th>
+          <th class="text-end" title="Active days in the current streak; up to 3 missed calendar days are allowed">Streak</th>
+          <th class="text-end" title="Longest grace-aware streak, counted in active days">Best</th>
         </tr></thead>
         <tbody>${body}</tbody>
       </table>
@@ -136,23 +135,23 @@ function renderLeaderboard(t) {
   });
 
   $('#consistent').innerHTML = top.length
-    ? `<p class="small text-body-secondary mb-3">Committed every day for ${CONSISTENT_MIN_DAYS}+ days in a row. Commit before 11:59 PM IST each day to keep it.</p>
+    ? `<p class="small text-body-secondary mb-3">${CONSISTENT_MIN_DAYS}+ active days in the current streak earns the Consistent tag. Up to 3 missed calendar days are allowed; missed days don't add to the count.</p>
       <ol class="list-unstyled mb-0 d-flex flex-column gap-3">${top.map((r) => `
         <li class="d-flex align-items-center gap-2">
           ${avatar(r.student, 36)}
           <div class="flex-grow-1 min-w-0">
             <div class="d-flex justify-content-between gap-2"><span class="fw-semibold text-truncate">${esc(r.student.name)}</span>
-              <span class="small text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="text-body-secondary">days in a row</span></span></div>
+              <span class="small text-nowrap"><span class="fw-semibold num">${r.currentStreak}</span> <span class="text-body-secondary">active days</span></span></div>
             <div class="d-flex align-items-center gap-2 mt-1">
               <div class="progress consistency-bar flex-grow-1" role="progressbar" aria-label="Active days in the last 30" aria-valuenow="${r.activeLast30}" aria-valuemin="0" aria-valuemax="30">
                 <div class="progress-bar" style="width:${Math.round((r.activeLast30 / 30) * 100)}%"></div>
               </div>
               <span class="small num">${r.activeLast30}/30</span>
             </div>
-            <div class="small text-body-secondary">Streak ${r.currentStreak}d · best ${r.bestStreak}d</div>
+            <div class="small text-body-secondary">Current ${r.currentStreak} active days · best ${r.bestStreak} active days</div>
           </div>
         </li>`).join('')}</ol>`
-    : emptyHtml(`Commit ${CONSISTENT_MIN_DAYS} days in a row to become Consistent.`, 'bi-calendar-check');
+    : emptyHtml(`Reach ${CONSISTENT_MIN_DAYS} active days in a grace-aware streak to become Consistent.`, 'bi-calendar-check');
 
   // Only shown when someone is on a comeback: it's there to celebrate, never to point out gaps.
   $('#comebackCard').classList.toggle('d-none', comebacks.length === 0);
@@ -249,24 +248,25 @@ async function openStudent(id) {
   if (!s) return;
   const t = today();
   const rows = state.activity.filter((r) => r.student_id === id);
-  const streaks = computeStreaks(rows.map((r) => r.activity_date), t);
+  const activeRows = rows.filter((r) => r.commit_count > 0);
+  const streaks = computeStreaks(activeRows.map((r) => r.activity_date), t);
   const total = rows.reduce((a, r) => a + r.points, 0);
   const commits = rows.reduce((a, r) => a + r.commit_count, 0);
+  const totalActiveDays = new Set(activeRows.map((r) => r.activity_date)).size;
 
   $('#studentModalTitle').innerHTML = `${avatar(s, 28)} <span class="ms-2">${esc(s.name)}</span>`;
   $('#studentModalBody').innerHTML = `
     <p class="mb-3"><a href="${ghUrl(s.github_username)}" target="_blank" rel="noopener" class="font-monospace">github.com/${esc(s.github_username)}</a>
       <span class="small text-body-secondary ms-2">synced ${relativeTime(s.last_synced_at)}</span></p>
     ${(() => {
-      const achieved = MILESTONES.filter((m) => streaks.best >= m.days);
-      if (!achieved.length) return `<p class="mb-3 small text-body-secondary">No consistency milestones yet. The first milestone is reached at ${MILESTONES[0].days} consecutive active days.</p>`;
-      const current = achieved.at(-1);
+      const { achieved, current } = milestoneStatus(id, totalActiveDays);
+      if (!achieved.length) return `<p class="mb-3 small text-body-secondary">No milestones yet. The first is reached at ${MILESTONES[0].days} total active days.</p>`;
       return `<div class="mb-3"><div class="small fw-semibold mb-2">Current milestone ${badge(current)}</div>
         <div class="small text-body-secondary mb-1">All milestones achieved</div>
         <div class="d-flex flex-wrap gap-2">${achieved.map((m) => badge(m)).join('')}</div></div>`;
     })()}
     <div class="row g-2 mb-3 text-center">
-      ${[['Total points', total], ['Commits', commits], ['Active days', rows.length], ['Current streak', `${streaks.current}d`], ['Best streak', `${streaks.best}d`]]
+      ${[['Total points', total], ['Commits', commits], ['Active days', totalActiveDays], ['Current streak (active days)', `${streaks.current}d`], ['Best streak (active days)', `${streaks.best}d`]]
         .map(([k, v]) => `<div class="col-4 col-sm"><div class="metric"><b>${v}</b><span>${k}</span></div></div>`).join('')}
     </div>
     <h3 class="subhead">Contribution calendar</h3>
@@ -312,13 +312,23 @@ async function openStudent(id) {
 // ---------- consistency milestones ----------
 /** Small chip like "🔥 On Fire" (title shows the requirement). */
 function badge(m) {
-  return m ? `<span class="milestone-badge ms-1" title="${m.days}+ consecutive days: ${esc(m.note)}">${m.emoji} ${esc(m.name)}</span>` : '';
+  return m ? `<span class="milestone-badge ms-1" title="${m.days}+ total active days: ${esc(m.note)}">${m.emoji} ${esc(m.name)}</span>` : '';
+}
+
+/** Combine current tracked totals with the durable achievement records in Supabase. */
+function milestoneStatus(studentId, totalActiveDays) {
+  const recorded = new Set(state.announcements
+    .filter((a) => a.student_id === studentId)
+    .map((a) => a.milestone_days));
+  const achieved = MILESTONES.filter((m) => totalActiveDays >= m.days || recorded.has(m.days));
+  const highestRecorded = Math.max(0, ...recorded);
+  return { achieved, current: milestoneFor(Math.max(totalActiveDays, highestRecorded)) };
 }
 
 function renderMilestoneGuide() {
   $('#milestoneGuide').innerHTML = `<ul class="list-unstyled mb-0 d-flex flex-column gap-2">${MILESTONES.map((m) => `
     <li class="d-flex align-items-center justify-content-between gap-2">
-      ${badge(m)}<span class="small text-body-secondary text-end">${m.days}+ consecutive days</span>
+      ${badge(m)}<span class="small text-body-secondary text-end">${m.days}+ total active days</span>
     </li>`).join('')}</ul>`;
 }
 
@@ -333,7 +343,7 @@ function announcementItem(a) {
       ${avatar(s, 32)}
       <div class="flex-grow-1 min-w-0">
         <div class="text-truncate"><span class="fw-semibold">${esc(s.name)}</span> reached <span class="milestone-badge">${m.emoji} ${esc(m.name)}</span></div>
-        <div class="small text-body-secondary">${m.days} consecutive days of contributions · ${esc(formatDay(a.achieved_on))}</div>
+        <div class="small text-body-secondary">${m.days} total active days · ${esc(formatDay(a.achieved_on))}</div>
       </div>
     </li>`;
 }
@@ -367,7 +377,7 @@ function announceNewMilestones(t) {
   const fresh = state.announcements.filter((a) => a.achieved_on >= since && !seen.has(a.id) && studentById(a.student_id) && milestoneByDays(a.milestone_days));
   const modalEl = $('#announceModal');
   if (!fresh.length || modalEl.classList.contains('show') || $('#studentModal').classList.contains('show')) return;
-  $('#announceTitle').textContent = fresh.length === 1 ? 'New consistency milestone' : `${fresh.length} new consistency milestones`;
+  $('#announceTitle').textContent = fresh.length === 1 ? 'New activity milestone' : `${fresh.length} new activity milestones`;
   $('#announceBody').innerHTML = `<ul class="list-unstyled mb-0 d-flex flex-column gap-3">${fresh.map(announcementItem).join('')}</ul>`;
   markSeen(fresh.map((a) => a.id));
   bootstrap.Modal.getOrCreateInstance(modalEl).show();

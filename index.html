@@ -85,7 +85,7 @@
             <div class="mt-2">Tap or click a contributor’s row to view their profile, including commits and activity details.</div>
             <div class="consistency-note mt-3">
               <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
-              <div><strong>Consistent</strong> means coding on 3 consecutive days. Miss a day and the tag disappears as the streak resets—but every new day is a chance to start again. Keep going!</div>
+              <div><strong>Consistent</strong> means reaching 3 active days in your current streak. Up to 3 missed days won’t reset it or add to the count. Miss a fourth full day and the tag resets—but you can earn it again. Keep going!</div>
             </div>
           </div>
         </div>
@@ -94,15 +94,15 @@
         <div class="card mt-4 d-none" id="milestonesCard">
           <div class="card-header section-head">
             <h2 class="section-title">Recent milestone achievements</h2>
-            <span class="section-meta">Consecutive days of contributions</span>
+            <span class="section-meta">Milestones earned from total active days</span>
           </div>
           <div class="card-body p-0" id="milestones"></div>
         </div>
 
         <div class="card mt-4">
           <div class="card-header section-head">
-            <h2 class="section-title">Consistency milestones</h2>
-            <span class="section-meta">Qualify with consecutive active days</span>
+            <h2 class="section-title">Activity milestones</h2>
+            <span class="section-meta">Qualify with total active days</span>
           </div>
           <div class="card-body" id="milestoneGuide"></div>
         </div>
@@ -113,7 +113,7 @@
         <div class="card">
           <div class="card-header section-head">
             <h2 class="section-title">Most consistent</h2>
-            <span class="section-meta">3+ days in a row</span>
+            <span class="section-meta">3+ active days · 3-day grace</span>
           </div>
           <div class="card-body" id="consistent"></div>
         </div>
@@ -173,7 +173,7 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h2 class="modal-title h5" id="announceTitle">New consistency milestones</h2>
+          <h2 class="modal-title h5" id="announceTitle">New activity milestones</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" id="announceBody"></div>

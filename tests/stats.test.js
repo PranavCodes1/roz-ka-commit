@@ -17,13 +17,17 @@ test('dates: timezone day boundaries and week start', () => {
   assert.equal(addMonths('2026-01-01', -1), '2025-12-01');
 });
 
-test('streaks: current streak survives until the day ends', () => {
+test('streaks: count active dates and bridge up to three inactive dates', () => {
   assert.deepEqual(computeStreaks([], T), { current: 0, best: 0 });
   assert.deepEqual(computeStreaks([T, day(-1), day(-2)], T), { current: 3, best: 3 });
-  // nothing today yet, but yesterday + day before: streak still alive
+  // Missing today doesn't add a day to the count.
   assert.deepEqual(computeStreaks([day(-1), day(-2)], T), { current: 2, best: 2 });
-  // last commit 2 days ago: streak broken
-  assert.deepEqual(computeStreaks([day(-2), day(-3)], T), { current: 0, best: 2 });
+  // Three missed dates can be bridged; they never increase the active-day count.
+  assert.deepEqual(computeStreaks([day(-5), day(-1)], T), { current: 2, best: 2 });
+  // Three full missed dates have elapsed; a return today can still continue the streak.
+  assert.deepEqual(computeStreaks([day(-4)], T), { current: 1, best: 1 });
+  // Four full missed dates have elapsed, so the current streak is reset.
+  assert.deepEqual(computeStreaks([day(-5)], T), { current: 0, best: 1 });
   // best streak in the past is kept
   assert.deepEqual(computeStreaks([day(-10), day(-9), day(-8), day(-7), T], T), { current: 1, best: 4 });
   // duplicates and unsorted input
@@ -57,6 +61,7 @@ test('leaderboard: points per period, 10 per active day regardless of commit cou
   assert.deepEqual(all.map((r) => r.rank), [1, 2, 2]); // ties share a rank
   const bilal = all[0];
   assert.equal(bilal.currentStreak, 2);
+  assert.equal(bilal.totalActiveDays, 3);
   assert.equal(bilal.totalPoints, 30);
 });
 
@@ -88,26 +93,24 @@ test('periodRange', () => {
   assert.deepEqual(periodRange('all', T), [null, T]);
 });
 
-test('findComeback: a break of 2+ days, then committing again (one day is enough)', () => {
+test('findComeback: a break beyond the 3-day grace period, then committing again', () => {
   const at = (...offsets) => offsets.map((o) => day(o));
-  // active, 3-day break (-6,-5,-4), back for 4 days (-3..0)
-  assert.deepEqual(findComeback(at(-8, -7, -3, -2, -1, 0), T), { streak: 4, gap: 3, since: day(-3), before: day(-7) });
-  // streak alive until yesterday still counts
-  assert.equal(findComeback(at(-6, -3, -2, -1), T).streak, 3);
-  // only a 1-day break: not a comeback
-  assert.equal(findComeback(at(-5, -3, -2, -1, 0), T), null);
-  // a single day back after the break is already a comeback (today or yesterday)
+  // Four missed dates between active dates reset the previous streak.
+  assert.deepEqual(findComeback(at(-8, -7, -2, -1, 0), T), { streak: 3, gap: 4, since: day(-2), before: day(-7) });
+  // Three missed dates are within grace and are not a comeback.
+  assert.equal(findComeback(at(-6, -2, -1, 0), T), null);
+  // A single active day after a 4+ day break is enough for a comeback.
   assert.deepEqual(findComeback(at(-6, 0), T), { streak: 1, gap: 5, since: day(0), before: day(-6) });
   assert.deepEqual(findComeback(at(-6, -1), T), { streak: 1, gap: 4, since: day(-1), before: day(-6) }); // back yesterday
-  // streak already broken (last commit 2 days ago): no
-  assert.equal(findComeback(at(-9, -4, -3, -2), T), null);
+  // The latest activity is outside the current grace window.
+  assert.equal(findComeback(at(-9, -5), T), null);
   // a newcomer with no earlier activity is not a comeback
   assert.equal(findComeback(at(-2, -1, 0), T), null);
-  // the comeback ends once they miss a whole day again
-  assert.equal(findComeback(at(-6, -2), T), null);
+  // the comeback ends after the grace window expires
+  assert.equal(findComeback(at(-6, -1), day(4)), null);
   // thresholds are adjustable
-  assert.equal(findComeback(at(-6, 0), T, { minGap: 2, minStreak: 3 }), null);
-  assert.equal(findComeback(at(-5, -1, 0), T, { minGap: 2, minStreak: 2 }).gap, 3);
+  assert.equal(findComeback(at(-6, 0), T, { minGap: 4, minStreak: 3 }), null);
+  assert.equal(findComeback(at(-6, -1, 0), T, { minGap: 4, minStreak: 2 }).gap, 4);
 });
 
 test('comebackChamps: everyone back after a break, longest comeback first, then longest break', () => {
@@ -122,8 +125,8 @@ test('comebackChamps: everyone back after a break, longest comeback first, then 
   const list = comebackChamps(four, activity, T);
   assert.deepEqual(list.map((c) => [c.student.id, c.streak, c.gap]), [[2, 7, 5], [1, 5, 5], [3, 4, 5]]);
   // a longer break ranks higher when the comeback streak is equal
-  const two = comebackChamps(four, [...days(1, [-6, -2, -1, 0]), ...days(2, [-9, -2, -1, 0])], T);
-  assert.deepEqual(two.map((c) => [c.student.id, c.gap]), [[2, 6], [1, 3]]);
+  const two = comebackChamps(four, [...days(1, [-7, -2, -1, 0]), ...days(2, [-9, -2, -1, 0])], T);
+  assert.deepEqual(two.map((c) => [c.student.id, c.gap]), [[2, 6], [1, 4]]);
   assert.deepEqual(comebackChamps(four, [], T), []);
 });
 
@@ -149,13 +152,13 @@ test('calendarValues', () => {
 });
 
 
-// ---------- Consistent = 3+ consecutive IST days with a commit ----------
+// ---------- Consistent = 3+ active dates in a grace-aware streak ----------
 const crew = ['A', 'B', 'C'].map((name, i) => ({ id: i + 1, name, github_username: name.toLowerCase() }));
 const on = (id, ...dates) => dates.map((d) => ({ student_id: id, activity_date: d, commit_count: 1, points: 10 }));
 const consistent = (activity, today) =>
   consistentContributors(buildLeaderboard(crew, activity, 'all', today)).map((r) => [r.student.name, r.currentStreak]);
 
-test('Consistent: earned after 3 consecutive days, independent of points or others', () => {
+test('Consistent: earned after 3 active days, independent of points or others', () => {
   assert.deepEqual(consistent(on(1, '2026-11-11', '2026-11-12'), '2026-11-12'), []); // 2 days: not yet
   assert.deepEqual(consistent(on(1, '2026-11-10', '2026-11-11', '2026-11-12'), '2026-11-12'), [['A', 3]]);
   // B has far more points (many old days) but no current streak: not consistent; A is, with fewer points
@@ -167,26 +170,26 @@ test('Consistent: earned after 3 consecutive days, independent of points or othe
   assert.deepEqual(consistent(two, '2026-11-12'), [['C', 5], ['A', 3]]);
 });
 
-test('Consistent: kept for the whole current day before that day\'s commit', () => {
+test('Consistent: kept through grace dates without increasing the active-day count', () => {
   const streak = on(1, '2026-11-10', '2026-11-11', '2026-11-12'); // nothing yet on 13 Nov
-  assert.deepEqual(consistent(streak, '2026-11-13'), [['A', 3]]); // all of 13 Nov, until 11:59 PM IST
-  assert.deepEqual(consistent([...streak, ...on(1, '2026-11-13')], '2026-11-13'), [['A', 4]]); // committed: continues
+  assert.deepEqual(consistent(streak, '2026-11-15'), [['A', 3]]); // three inactive dates don't reset or add
+  assert.deepEqual(consistent([...streak, ...on(1, '2026-11-16')], '2026-11-16'), [['A', 4]]); // return after grace dates
 });
 
-test('Consistent: a single missed day breaks the streak at midnight IST', () => {
-  const streak = on(1, '2026-11-10', '2026-11-11', '2026-11-12'); // missed 13 Nov
-  assert.deepEqual(consistent(streak, '2026-11-14'), []);
-  // coming back starts a new streak: Consistent again after 3 more consecutive days
-  const back = [...streak, ...on(1, '2026-11-14', '2026-11-15')];
-  assert.deepEqual(consistent(back, '2026-11-15'), []);
-  assert.deepEqual(consistent([...back, ...on(1, '2026-11-16')], '2026-11-16'), [['A', 3]]);
+test('Consistent: tag disappears after four complete missed dates and can be earned again', () => {
+  const streak = on(1, '2026-11-10', '2026-11-11', '2026-11-12');
+  assert.deepEqual(consistent(streak, '2026-11-17'), []); // missed 13–16 Nov
+  // after reset, 3 active dates in a new streak earn the tag again
+  const back = [...streak, ...on(1, '2026-11-17', '2026-11-18')];
+  assert.deepEqual(consistent(back, '2026-11-18'), []);
+  assert.deepEqual(consistent([...back, ...on(1, '2026-11-19')], '2026-11-19'), [['A', 3]]);
 });
 
 test('Consistent: the IST clock decides the day at midnight', () => {
   const streak = on(1, '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13'); // last commit 13 Nov
   const at = (iso) => consistent(streak, todayIn('Asia/Kolkata', new Date(iso)));
-  assert.deepEqual(at('2026-11-14T18:29:00Z'), [['A', 4]]); // 23:59 IST 14 Nov: still has the day to commit
-  assert.deepEqual(at('2026-11-14T18:31:00Z'), []); // 00:01 IST 15 Nov: 14 Nov was missed
+  assert.deepEqual(at('2026-11-17T18:29:00Z'), [['A', 4]]); // 23:59 IST 17 Nov: still has the grace day to return
+  assert.deepEqual(at('2026-11-17T18:31:00Z'), []); // 00:01 IST 18 Nov: four full missed dates have elapsed
 });
 
 test('Consistent: points are unchanged by the new rule', () => {
@@ -199,7 +202,7 @@ test('Consistent: points are unchanged by the new rule', () => {
 
 
 // ---------- consistency milestones ----------
-test('milestoneFor: highest milestone reached by the current streak', () => {
+test('milestoneFor: highest milestone reached by total active days', () => {
   assert.equal(milestoneFor(0), null);
   assert.equal(milestoneFor(4), null);
   assert.equal(milestoneFor(5).name, 'On Fire');

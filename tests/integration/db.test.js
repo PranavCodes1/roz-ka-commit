@@ -282,20 +282,24 @@ test('milestones: a bulk sync announces each milestone once, with the right date
   assert.equal((await announcementsOf(s.id)).length, 2);
 });
 
-test('milestones: each contributor earns each milestone once; joined streaks keep the first date', async (t) => {
+test('milestones: total active days qualify across gaps and each milestone is stored once', async (t) => {
   if (!enoughForMilestones()) return t.skip(`tracking start ${S} is too recent for this test`);
   const s = await addStudent('-ms2');
-  // streak A: days 0-3 (4 days, no milestone); streak B: days 5-9 (5 days -> 🔥)
+  // 4 active dates, then a gap, then 5 more; total-active thresholds cross at offsets 5 and 7.
   await admin.from('commits').insert(daysCommits(s, 4000, [0, 1, 2, 3]));
   await admin.from('commits').insert(daysCommits(s, 4100, [5, 6, 7, 8, 9]));
-  assert.deepEqual(await announcementsOf(s.id), [[5, addDays(S, 5), addDays(S, 9)]]);
-  // a late-synced commit on day 4 joins them into one 10-day streak: 7 is new, 5 isn't repeated
+  assert.deepEqual(await announcementsOf(s.id), [
+    [5, S, addDays(S, 5)], [7, S, addDays(S, 7)],
+  ]);
+  // A late-synced active date reconciles milestone dates to the true Nth active dates.
   await admin.from('commits').insert(commit(s, 4200, at(4, '05:00:00')));
-  assert.deepEqual(await announcementsOf(s.id), [[7, S, addDays(S, 6)], [5, addDays(S, 5), addDays(S, 9)]]);
-  // break on days 10-11, then a new 5-day streak (12-16): don't repeat the 5-day milestone
+  assert.deepEqual(await announcementsOf(s.id), [
+    [5, S, addDays(S, 4)], [7, S, addDays(S, 6)],
+  ]);
+  // Five more active dates cross 14 total active days; previous milestones stay unchanged.
   await admin.from('commits').insert(daysCommits(s, 4300, [12, 13, 14, 15, 16]));
   assert.deepEqual(await announcementsOf(s.id), [
-    [7, S, addDays(S, 6)], [5, addDays(S, 5), addDays(S, 9)],
+    [5, S, addDays(S, 5)], [7, S, addDays(S, 7)], [14, S, addDays(S, 15)],
   ]);
 });
 

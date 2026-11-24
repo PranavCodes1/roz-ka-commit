@@ -302,11 +302,12 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- Consistency milestones: public announcements when a contributor's streak
--- (consecutive IST days with activity) reaches 5, 7, 14, … 365 days.
+-- Milestone announcements when a contributor reaches 5, 7, 14, … 365 total
+-- active calendar days in the tracked history. Missing dates don't reset progress.
 -- Generated here in the database whenever a day's activity is recorded (hourly
 -- sync, manual refresh, private-repo entry), so it works for every path.
--- Each milestone is announced once per contributor, preserving its first date.
+-- Each milestone has one permanent row per contributor. The date is reconciled
+-- to the date the contributor reached that total active-day count.
 -- Keep the list in sync with MILESTONES in js/stats.js.
 -- ---------------------------------------------------------------------
 create or replace function public.rkc_milestones()
@@ -318,8 +319,8 @@ create table if not exists public.milestone_announcements (
   id             bigint  generated always as identity primary key,
   student_id     bigint  not null references public.students (id) on delete cascade,
   milestone_days integer not null check (milestone_days > 0),
-  streak_start   date    not null,   -- first day of the streak that reached it
-  achieved_on    date    not null,   -- the IST day the streak reached milestone_days
+  streak_start   date    not null,   -- legacy field; new rows use first date in the active-day count
+  achieved_on    date    not null,   -- the IST date the total active-day threshold was reached
   created_at     timestamptz not null default now()
 );
 
@@ -343,34 +344,39 @@ alter table public.milestone_announcements
 create unique index if not exists milestone_announcements_once_per_student_idx
   on public.milestone_announcements (student_id, milestone_days);
 
--- Store the earliest qualifying streak for each milestone not already achieved.
+-- Store each total-active-day milestone and reconcile its date. This also repairs
+-- dates from the former consecutive-day rule and handles late-synced activity.
+-- daily_activity's primary key guarantees one row per contributor and calendar
+-- date, so multiple commits on the same date add no extra milestone progress.
 create or replace function public.rkc_refresh_milestones(p_student bigint)
 returns integer language plpgsql security definer
 set search_path = public
 as $$
 declare n integer;
 begin
-  with days as (
-    select activity_date as d from public.daily_activity
+  with active_days as (
+    select activity_date,
+           row_number() over (order by activity_date) as active_day_number,
+           first_value(activity_date) over (
+             order by activity_date rows between unbounded preceding and unbounded following
+           ) as active_history_start
+      from public.daily_activity
      where student_id = p_student and commit_count > 0
-  ), runs as (
-    select min(d) as s, max(d) as e
-      from (select d, d - (row_number() over (order by d))::int as grp from days) x
-     group by grp
-  ), earliest as (
-    select distinct on (m) m, r.s as streak_start, r.s + (m - 1) as achieved_on
-      from runs r
-      cross join unnest(public.rkc_milestones()) as m
-     where r.e - r.s + 1 >= m
-     order by m, r.s
+  ), qualified as (
+    select m as milestone_days,
+           d.active_history_start as streak_start,
+           d.activity_date as achieved_on
+      from unnest(public.rkc_milestones()) as m
+      join active_days d on d.active_day_number = m
   )
   insert into public.milestone_announcements (student_id, milestone_days, streak_start, achieved_on)
-  select p_student, e.m, e.streak_start, e.achieved_on
-    from earliest e
-   where not exists (
-       select 1 from public.milestone_announcements a
-        where a.student_id = p_student and a.milestone_days = e.m)
-  on conflict do nothing;
+  select p_student, q.milestone_days, q.streak_start, q.achieved_on
+    from qualified q
+  on conflict (student_id, milestone_days) do update
+    set streak_start = excluded.streak_start,
+        achieved_on = excluded.achieved_on
+    where milestone_announcements.streak_start is distinct from excluded.streak_start
+       or milestone_announcements.achieved_on is distinct from excluded.achieved_on;
   get diagnostics n = row_count;
   return n;
 end $$;
